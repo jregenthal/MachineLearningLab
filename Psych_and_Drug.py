@@ -1,7 +1,7 @@
 # -*- coding: utf-8 -*-
 '''
 Course: Machine Learning Lab given by Prof. Brefeld
-Project: Influence of psychological factors of drug consumption
+Project: Influence of psychological factors on drug consumption
 Authors: Johanna Regenthal and Sofija Engelson
 Due date: 
 '''
@@ -13,11 +13,13 @@ import pandas as pd
 from sklearn.preprocessing import LabelEncoder
 import matplotlib.pyplot as plt
 import seaborn as sns
-from scipy.stats import chisquare
+from scipy.stats import chi2_contingency
+from matplotlib import patches as mpatches
 
 #----------------------1.Reading and cleaning data-------------------------------
 
 #----------------------1.1 Reading--------------------------------------------------
+
 colnames = ['ID','Age','Gender','Education','Country','Ethnicity','Nscore','Escore','Oscore','Ascore','Cscore','Impulsiv','SS','Alcohol','Amphet','Amyl','Benzos','Caff','Cannabis','Choc','Coke','Crack','Ecstasy','Heroin','Ketamine','Legalh','LSD','Meth','Mushrooms','Nicotine','Semer','VSA']
 
 PsychDrug = pd.read_csv('drug_consumption.data', names = colnames, header = None)
@@ -38,9 +40,10 @@ for column in DrugUse:
     PsychDrug[column] = le.fit_transform(PsychDrug[column])
 
 for i in range(len(DrugUse)):
-    PsychDrug.loc[((PsychDrug[DrugUse[i]]==0) | (PsychDrug[DrugUse[i]]==1)), ClassificationDrugUse [i]] = 'Non-user'
-    PsychDrug.loc[((PsychDrug[DrugUse[i]]==2) | (PsychDrug[DrugUse[i]]==3) | (PsychDrug[DrugUse[i]]==4) | (PsychDrug[DrugUse[i]]==5) | (PsychDrug[DrugUse[i]]==6)), ClassificationDrugUse [i]] = 'User'
+    PsychDrug.loc[((PsychDrug[DrugUse[i]]==0) | (PsychDrug[DrugUse[i]]==1)), ClassificationDrugUse [i]] = False
+    PsychDrug.loc[((PsychDrug[DrugUse[i]]==2) | (PsychDrug[DrugUse[i]]==3) | (PsychDrug[DrugUse[i]]==4) | (PsychDrug[DrugUse[i]]==5) | (PsychDrug[DrugUse[i]]==6)), ClassificationDrugUse [i]] = True
 
+# SE: Sollen die DrugUse columns gelöscht werden?
 # PsychDrug.drop(columns = DrugUse)
 
 #------------------1.2.2 Dequantification of explanatory variables------------------------
@@ -135,29 +138,63 @@ plt.ylabel("Count",fontsize=13)
 plt.title("Drug Vs User Or Non-user",fontsize=15)
 plt.legend()
 
-#--------------------------Testing--------------------------------------------
+#----------------------------------------------------------------------------
+# Visualization of the correlations and covariances between all continuous variables
 
-data_crosstab = pd.crosstab(PsychDrug['Age'],  
-                            PsychDrug['Education'], 
-                                margins = False)
-chisquare(data_crosstab)
+# SE: Wollen wir uns nur die PsychVars angucken?
+# PsychVar = ['Nscore','Escore','Oscore','Ascore','Cscore']
 
-ExpVar = ['Age','Gender','Education','Country','Ethnicity']
-PsychVar = ['Nscore','Escore','Oscore','Ascore','Cscore']
+corMat = PsychDrug.corr()
+covMat = PsychDrug.drop(columns=['ID']).cov()
 
-X = PsychDrug[ExpVar]
-cov_X = np.cov(X)
-plot_values = np.vstack(cov_X)
-fig1 = plt.figure()
-plt.title('Covariance Matrix Representation (in log)')
-ax1 = fig1.add_subplot(111)
-cax1 = ax1.matshow(plot_values, interpolation='nearest')
-fig1.colorbar(cax1)
+sns.heatmap(corMat)
+sns.heatmap(covMat)
 
+# Chi-Square test for correlation between two categorial variables (demographic variable --> usage classification)
+# For example: Education and usage of nicotine
 
-cor_X = np.corrcoef(PsychDrug[PsychVar])
-fig = plt.figure()
-plt.title('Correlation Matrix Representation')
-ax = fig.add_subplot(111)
-cax = ax.matshow(np.corrcoef(cor_X), interpolation='nearest')
-fig.colorbar(cax)
+def perform_chi_test(v1, v2):
+    table = pd.crosstab(PsychDrug[v1], PsychDrug[v2], margins = False)
+    stat, p, dof, expected = chi2_contingency(table)
+    alpha = 0.05
+    #print('significance=%.3f, p=%.3f' % (alpha, p))
+    if p <= alpha:
+        print(v1 + ' and ' + v2 + ' are dependent because H0 can be rejected with a p-value of p=%.3f.' % p)
+    else:
+        print(v1 + ' and ' + v2 + ' are independent because H0 can not be rejected with a p-value of p=%.3f.' % p)
+
+perform_chi_test('Education', 'User_Nicotine')
+
+# Visualization of a continous variable for certain groups
+# For example: Big Five scores for males and females in comparison
+
+Male = mpatches.Patch(color='blue')
+Female = mpatches.Patch(color='red')
+mypal = {"Male": "b", "Female": "r"}
+
+f, axes = plt.subplots(5, 1, sharex=True, sharey=True)
+f.subplots_adjust(hspace=.75)
+
+sns.boxplot(x = 'Nscore', y = 'Gender', data = PsychDrug, ax = axes[0], palette = mypal)
+sns.boxplot(x = 'Escore', y = 'Gender', data = PsychDrug, ax = axes[1], palette = mypal)
+sns.boxplot(x = 'Oscore', y = 'Gender', data = PsychDrug, ax = axes[2], palette = mypal)
+sns.boxplot(x = 'Ascore', y = 'Gender', data = PsychDrug, ax = axes[3], palette = mypal)
+sns.boxplot(x = 'Cscore', y = 'Gender', data = PsychDrug, ax = axes[4], palette = mypal)
+f.legend(handles = [Male, Female], labels = ['Male','Female'], loc = 'lower right')
+
+for boxplot in range(5):
+    axes[boxplot].yaxis.set_visible(False)
+    
+# Visualization of a contious variable for a certain subset
+# For example: Big Five scores for people substance abusers (VSA = volatile substance abuse)    
+
+test = PsychDrug[PsychDrug['User_VSA']==True]
+
+f, axes = plt.subplots(5, 1, sharex=True, sharey=True)
+f.subplots_adjust(hspace=.75)
+
+sns.boxplot(x = 'Nscore', data = test, ax = axes[0])
+sns.boxplot(x = 'Escore', data = test, ax = axes[1])
+sns.boxplot(x = 'Oscore', data = test, ax = axes[2])
+sns.boxplot(x = 'Ascore', data = test, ax = axes[3])
+sns.boxplot(x = 'Cscore', data = test, ax = axes[4])
