@@ -137,6 +137,7 @@ plt.xticks(bins,DrugUse,rotation=50,fontsize=13)
 plt.ylabel("Count",fontsize=13)
 plt.title("Drug Vs User Or Non-user",fontsize=15)
 plt.legend()
+plt.show()
 
 #----------------------------------------------------------------------------
 # Visualization of the correlations and covariances between all continuous variables
@@ -198,3 +199,11 @@ sns.boxplot(x = 'Escore', data = test, ax = axes[1])
 sns.boxplot(x = 'Oscore', data = test, ax = axes[2])
 sns.boxplot(x = 'Ascore', data = test, ax = axes[3])
 sns.boxplot(x = 'Cscore', data = test, ax = axes[4])
+
+#----------------------------------3. Bayesian Network--------------------
+
+#----------------------------------3.1 Conditional Probabilities--------------------
+
+CondProb = pd.crosstab(index=PsychDrug['Education'], columns=PsychDrug['User_VSA'], margins=True, normalize='index')
+
+CondProb = pd.crosstab(index=PsychDrug['Education'], columns=PsychDrug['User_VSA'], margins=True, normalize='columns')
