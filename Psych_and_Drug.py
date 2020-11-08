@@ -43,7 +43,6 @@ for i in range(len(DrugUse)):
     PsychDrug.loc[((PsychDrug[DrugUse[i]]==0) | (PsychDrug[DrugUse[i]]==1)), ClassificationDrugUse [i]] = False
     PsychDrug.loc[((PsychDrug[DrugUse[i]]==2) | (PsychDrug[DrugUse[i]]==3) | (PsychDrug[DrugUse[i]]==4) | (PsychDrug[DrugUse[i]]==5) | (PsychDrug[DrugUse[i]]==6)), ClassificationDrugUse [i]] = True
 
-# SE: Sollen die DrugUse columns gelöscht werden?
 # PsychDrug.drop(columns = DrugUse)
 
 #------------------1.2.2 Dequantification of explanatory variables------------------------
@@ -141,15 +140,22 @@ plt.show()
 
 #----------------------------------------------------------------------------
 # Visualization of the correlations and covariances between all continuous variables
+# grouped by drug use frequencies and psychological variables
 
-# SE: Wollen wir uns nur die PsychVars angucken?
-# PsychVar = ['Nscore','Escore','Oscore','Ascore','Cscore']
+PsychVar = ['Nscore','Escore','Oscore','Ascore','Cscore','Impulsiv','SS']
 
-corMat = PsychDrug.corr()
-covMat = PsychDrug.drop(columns=['ID']).cov()
+corMatDrugUse = PsychDrug[DrugUse].corr()
+corMatPsychVar = PsychDrug[PsychVar].corr()
 
-sns.heatmap(corMat)
-sns.heatmap(covMat)
+covMatDrugUse = PsychDrug[DrugUse].cov()
+covMatPsychVar = PsychDrug[PsychVar].cov()
+
+sns.heatmap(corMatDrugUse)
+sns.heatmap(corMatPsychVar)
+
+sns.heatmap(covMatDrugUse)
+sns.heatmap(covMatPsychVar)
+
 
 # Chi-Square test for correlation between two categorial variables (demographic variable --> usage classification)
 # For example: Education and usage of nicotine
@@ -166,8 +172,26 @@ def perform_chi_test(v1, v2):
 
 perform_chi_test('Education', 'User_Nicotine')
 
+# Definition of a cumulative variable which indicates users (dacade-based) of legal and illegal drugs
+LegalDrugs = ['User_Alcohol', 'User_Caff', 'User_Choc', 'User_Coke', 'User_Nicotine']
+IllegalDrugs = ['User_Amphet', 'User_Amyl', 'User_Benzos','User_Cannabis', 'User_Crack',\
+                'User_Ecstasy', 'User_Heroin', 'User_Ketamine', 'User_Legalh', 'User_LSD',\
+                'User_Meth', 'User_Mushrooms','User_Semer', 'User_VSA']
+
+def make_cumvar (list):
+    User_cum = [False] * len(PsychDrug)
+    for i in range(len(PsychDrug)):
+        for drug in list:
+            if PsychDrug[drug][i]==True:
+                User_cum[i] = True
+    return User_cum
+
+PsychDrug['User_LegalDrugs'] = make_cumvar(LegalDrugs)
+PsychDrug['User_IllegalDrugs'] = make_cumvar(IllegalDrugs)
+
 # Visualization of a continous variable for certain groups
 # For example: Big Five scores for males and females in comparison
+# SE: Funktioniert nicht für boolean variables.
 
 Male = mpatches.Patch(color='blue')
 Female = mpatches.Patch(color='red')
@@ -187,19 +211,19 @@ for boxplot in range(5):
     axes[boxplot].yaxis.set_visible(False)
     
 # Visualization of a contious variable for a certain subset
-# For example: Big Five scores for people substance abusers (VSA = volatile substance abuse)    
-
-test = PsychDrug[PsychDrug['User_VSA']==True]
+# For example: Big Five for users of illegal drugs
+    
+subset = PsychDrug[PsychDrug['User_IllegalDrugs']==True]
 
 f, axes = plt.subplots(5, 1, sharex=True, sharey=True)
 f.subplots_adjust(hspace=.75)
 
-sns.boxplot(x = 'Nscore', data = test, ax = axes[0])
-sns.boxplot(x = 'Escore', data = test, ax = axes[1])
-sns.boxplot(x = 'Oscore', data = test, ax = axes[2])
-sns.boxplot(x = 'Ascore', data = test, ax = axes[3])
-sns.boxplot(x = 'Cscore', data = test, ax = axes[4])
-
+sns.boxplot(x = 'Nscore', data = subset, ax = axes[0])
+sns.boxplot(x = 'Escore', data = subset, ax = axes[1])
+sns.boxplot(x = 'Oscore', data = subset, ax = axes[2])
+sns.boxplot(x = 'Ascore', data = subset, ax = axes[3])
+sns.boxplot(x = 'Cscore', data = subset, ax = axes[4])
+    
 #----------------------------------3. Bayesian Network--------------------
 
 #----------------------------------3.1 Conditional Probabilities--------------------
