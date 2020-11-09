@@ -210,6 +210,14 @@ f.legend(handles = [Male, Female], labels = ['Male','Female'], loc = 'lower righ
 for boxplot in range(5):
     axes[boxplot].yaxis.set_visible(False)
     
+# Visualization of Big Five scores for users and non-users of illegal drugs
+
+sns.catplot(y = 'Nscore', x = 'User_IllegalDrugs', data = PsychDrug, kind="box") 
+sns.catplot(y = 'Escore', x = 'User_IllegalDrugs', data = PsychDrug, kind="box") 
+sns.catplot(y = 'Oscore', x = 'User_IllegalDrugs', data = PsychDrug, kind="box") 
+sns.catplot(y = 'Ascore', x = 'User_IllegalDrugs', data = PsychDrug, kind="box") 
+sns.catplot(y = 'Cscore', x = 'User_IllegalDrugs', data = PsychDrug, kind="box") 
+
 # Visualization of a contious variable for a certain subset
 # For example: Big Five for users of illegal drugs
     
