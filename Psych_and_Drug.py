@@ -150,12 +150,25 @@ corMatPsychVar = PsychDrug[PsychVar].corr()
 covMatDrugUse = PsychDrug[DrugUse].cov()
 covMatPsychVar = PsychDrug[PsychVar].cov()
 
-sns.heatmap(corMatDrugUse)
-sns.heatmap(corMatPsychVar)
+ax = plt.axes()
+sns.heatmap(corMatDrugUse, ax = ax)
+ax.set_title('Correlation heatmap for drug use frequencies')
+plt.show()
 
-sns.heatmap(covMatDrugUse)
-sns.heatmap(covMatPsychVar)
+ax = plt.axes()
+sns.heatmap(corMatPsychVar, ax = ax)
+ax.set_title('Correlation heatmap for psychological factors')
+plt.show()
 
+ax = plt.axes()
+sns.heatmap(covMatDrugUse, ax = ax)
+ax.set_title('Covariance heatmap for drug use frequencies')
+plt.show()
+
+ax = plt.axes()
+sns.heatmap(covMatPsychVar, ax = ax)
+ax.set_title('Covariance heatmap for psychological factors')
+plt.show()
 
 # Chi-Square test for correlation between two categorial variables (demographic variable --> usage classification)
 # For example: Education and usage of nicotine
@@ -179,38 +192,42 @@ IllegalDrugs = ['User_Amphet', 'User_Amyl', 'User_Benzos','User_Cannabis', 'User
                 'User_Meth', 'User_Mushrooms','User_Semer', 'User_VSA']
 
 def make_cumvar (list):
-    User_cum = [False] * len(PsychDrug)
+    User_cum = ['Non-user'] * len(PsychDrug)
+#    User_cum = [False] * len(PsychDrug)
     for i in range(len(PsychDrug)):
         for drug in list:
             if PsychDrug[drug][i]==True:
-                User_cum[i] = True
+                User_cum[i] = 'User'
+#                User_cum[i] = True
     return User_cum
 
 PsychDrug['User_LegalDrugs'] = make_cumvar(LegalDrugs)
 PsychDrug['User_IllegalDrugs'] = make_cumvar(IllegalDrugs)
 
 # Visualization of a continous variable for certain groups
-# For example: Big Five scores for males and females in comparison
-# SE: Funktioniert nicht für boolean variables.
+# For example: Big Five scores for users and non-users of illegal drugs in comparison
 
-Male = mpatches.Patch(color='blue')
-Female = mpatches.Patch(color='red')
-mypal = {"Male": "b", "Female": "r"}
+NonUser = mpatches.Patch(color='blue')
+User = mpatches.Patch(color='red')
+mypal = {'Non-user': 'b', 'User': 'r'}
 
 f, axes = plt.subplots(5, 1, sharex=True, sharey=True)
 f.subplots_adjust(hspace=.75)
 
-sns.boxplot(x = 'Nscore', y = 'Gender', data = PsychDrug, ax = axes[0], palette = mypal)
-sns.boxplot(x = 'Escore', y = 'Gender', data = PsychDrug, ax = axes[1], palette = mypal)
-sns.boxplot(x = 'Oscore', y = 'Gender', data = PsychDrug, ax = axes[2], palette = mypal)
-sns.boxplot(x = 'Ascore', y = 'Gender', data = PsychDrug, ax = axes[3], palette = mypal)
-sns.boxplot(x = 'Cscore', y = 'Gender', data = PsychDrug, ax = axes[4], palette = mypal)
-f.legend(handles = [Male, Female], labels = ['Male','Female'], loc = 'lower right')
+sns.boxplot(x = 'Nscore', y = 'User_IllegalDrugs', data = PsychDrug, ax = axes[0], palette = mypal)
+sns.boxplot(x = 'Escore', y = 'User_IllegalDrugs', data = PsychDrug, ax = axes[1], palette = mypal)
+sns.boxplot(x = 'Oscore', y = 'User_IllegalDrugs', data = PsychDrug, ax = axes[2], palette = mypal)
+sns.boxplot(x = 'Ascore', y = 'User_IllegalDrugs', data = PsychDrug, ax = axes[3], palette = mypal)
+sns.boxplot(x = 'Cscore', y = 'User_IllegalDrugs', data = PsychDrug, ax = axes[4], palette = mypal)
+f.legend(handles = [NonUser,User], labels = ['Non-user','User'], loc = 'lower right')
+f.suptitle('Big Five for users and non-users of illegal drugs (decade-based)')
 
 for boxplot in range(5):
     axes[boxplot].yaxis.set_visible(False)
     
+
 # Visualization of Big Five scores for users and non-users of illegal drugs
+# Separate plots
 
 sns.catplot(y = 'Nscore', x = 'User_IllegalDrugs', data = PsychDrug, kind="box") 
 sns.catplot(y = 'Escore', x = 'User_IllegalDrugs', data = PsychDrug, kind="box") 
@@ -236,6 +253,24 @@ sns.boxplot(x = 'Cscore', data = subset, ax = axes[4])
 
 #----------------------------------3.1 Conditional Probabilities--------------------
 
-CondProb = pd.crosstab(index=PsychDrug['Education'], columns=PsychDrug['User_VSA'], margins=True, normalize='index')
+# TESTING
+pd.crosstab(index=PsychDrug['Gender'], columns=PsychDrug['User_LSD'])
 
-CondProb = pd.crosstab(index=PsychDrug['Education'], columns=PsychDrug['User_VSA'], margins=True, normalize='columns')
+
+CondProb = pd.crosstab(index=PsychDrug['Gender','Education'], columns=PsychDrug['User_LSD'], margins=True, normalize='index')
+
+CondProb = pd.crosstab(index=PsychDrug['Education'], columns=PsychDrug['User_LSD'], margins=True, normalize='columns')
+
+target = np.array(PsychDrug['User_LSD'], dtype=object)
+Nscore = np.array(PsychDrug['Nscore'], dtype=object)
+Escore = np.array(PsychDrug['Escore'], dtype=object)
+Oscore = np.array(PsychDrug['Oscore'], dtype=object)
+Ascore = np.array(PsychDrug['Ascore'], dtype=object)
+Cscore = np.array(PsychDrug['Cscore'], dtype=object)
+
+test = pd.crosstab(index=target, columns=[Nscore, Escore, Oscore, Ascore, Cscore], normalize='index')
+
+PredVar = PsychVar + ['Education','Gender', 'Age','Country']
+test = (PsychDrug.groupby(['Education','Gender', 'User_LSD']).count() / PsychDrug.groupby(['Education','Gender']).count())
+
+test = (PsychDrug.groupby(PredVar + ['User_LSD']).count() / PsychDrug.groupby(PredVar).count())
