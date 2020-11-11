@@ -15,6 +15,7 @@ import matplotlib.pyplot as plt
 import seaborn as sns
 from scipy.stats import chi2_contingency
 from matplotlib import patches as mpatches
+from pomegranate import *
 
 #----------------------1.Reading and cleaning data-------------------------------
 
@@ -254,23 +255,56 @@ sns.boxplot(x = 'Cscore', data = subset, ax = axes[4])
 #----------------------------------3.1 Conditional Probabilities--------------------
 
 # TESTING
-pd.crosstab(index=PsychDrug['Gender'], columns=PsychDrug['User_LSD'])
+
+DemoVar = ['Education','Gender', 'Age','Country']
+#PredVar = PsychVar + DemoVar
+
+# Producing a table of conditional probabilities
+list_outer = []
+while DemoVar != []:
+    print(DemoVar)
+    CondProbTable = (PsychDrug.groupby(DemoVar+['User_LSD']).count() / PsychDrug.groupby(DemoVar).count())
+    for index, row in CondProbTable.iterrows():
+        list_inner = []
+        for ind in index:
+            list_inner.append(ind)
+        list_inner.append(row.min())
+        list_outer.append(list_inner)
+    DemoVar.pop()
+
+# The guests initial door selection is completely random
+Education = DiscreteDistribution({'Education': 1/5, 'Gender': 1/5, 'Age': 1/5, 'Country': 1/5, 'User_LSD': 1/5})
+Gender = DiscreteDistribution({'Education': 1/5, 'Gender': 1/5, 'Age': 1/5, 'Country': 1/5, 'User_LSD': 1/5})
+Age = DiscreteDistribution({'Education': 1/5, 'Gender': 1/5, 'Age': 1/5, 'Country': 1/5, 'User_LSD': 1/5})
+Country = DiscreteDistribution({'Education': 1/5, 'Gender': 1/5, 'Age': 1/5, 'Country': 1/5, 'User_LSD': 1/5})
+User_LSD = DiscreteDistribution({'Education': 1/5, 'Gender': 1/5, 'Age': 1/5, 'Country': 1/5, 'User_LSD': 1/5})
+
+# Monty is dependent on both the guest and the prize. 
+monty = ConditionalProbabilityTable(list_outer, [Education, Gender, Age, Country, User_LSD])
+
+# State objects hold both the distribution, and a high level name.
+s1 = State(Education, name="Education")
+s2 = State(Gender, name="Gender")
+s3 = State(Age, name="Age")
+s4 = State(Country, name="Country")
+s5 = State(User_LSD, name="User_LSD")
+
+# Create the Bayesian network object with a useful name
+model = BayesianNetwork("Monty Hall Problem")
+
+# Add the three states to the network 
+model.add_states(s1, s2, s3, s4, s5)
 
 
-CondProb = pd.crosstab(index=PsychDrug['Gender','Education'], columns=PsychDrug['User_LSD'], margins=True, normalize='index')
+# Add edges which represent conditional dependencies, where the second node is 
+# conditionally dependent on the first node (Monty is dependent on both guest and prize)
+model.add_edge(s1, s5)
+model.add_edge(s2, s5)
+model.add_edge(s3, s5)
+model.add_edge(s4, s5)
 
-CondProb = pd.crosstab(index=PsychDrug['Education'], columns=PsychDrug['User_LSD'], margins=True, normalize='columns')
+model.bake()
 
-target = np.array(PsychDrug['User_LSD'], dtype=object)
-Nscore = np.array(PsychDrug['Nscore'], dtype=object)
-Escore = np.array(PsychDrug['Escore'], dtype=object)
-Oscore = np.array(PsychDrug['Oscore'], dtype=object)
-Ascore = np.array(PsychDrug['Ascore'], dtype=object)
-Cscore = np.array(PsychDrug['Cscore'], dtype=object)
+model.probability([['Doctorate Degree', 'Female', '25-34','UK', False]])
 
-test = pd.crosstab(index=target, columns=[Nscore, Escore, Oscore, Ascore, Cscore], normalize='index')
-
-PredVar = PsychVar + ['Education','Gender', 'Age','Country']
-test = (PsychDrug.groupby(['Education','Gender', 'User_LSD']).count() / PsychDrug.groupby(['Education','Gender']).count())
-
-test = (PsychDrug.groupby(PredVar + ['User_LSD']).count() / PsychDrug.groupby(PredVar).count())
+model.structure
