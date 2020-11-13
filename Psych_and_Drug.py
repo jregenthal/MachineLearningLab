@@ -261,8 +261,8 @@ DemoVar = ['Education','Gender', 'Age','Country']
 
 # Producing a table of conditional probabilities
 list_outer = []
-while DemoVar != []:
-    print(DemoVar)
+#while DemoVar != []:
+#    print(DemoVar)
     CondProbTable = (PsychDrug.groupby(DemoVar+['User_LSD']).count() / PsychDrug.groupby(DemoVar).count())
     for index, row in CondProbTable.iterrows():
         list_inner = []
@@ -270,7 +270,7 @@ while DemoVar != []:
             list_inner.append(ind)
         list_inner.append(row.min())
         list_outer.append(list_inner)
-    DemoVar.pop()
+#    DemoVar.pop()
 
 # The guests initial door selection is completely random
 Education = DiscreteDistribution({'Education': 1/5, 'Gender': 1/5, 'Age': 1/5, 'Country': 1/5, 'User_LSD': 1/5})
