@@ -254,7 +254,7 @@ sns.boxplot(x = 'Cscore', data = subset, ax = axes[4])
 
 #----------------------------------3.1 Conditional Probabilities--------------------
 
-# TESTING
+# TESTING AREA - Sofija
 
 DemoVar = ['Education','Gender', 'Age','Country']
 #PredVar = PsychVar + DemoVar
@@ -264,6 +264,8 @@ list_outer = []
 #while DemoVar != []:
 #    print(DemoVar)
     CondProbTable = (PsychDrug.groupby(DemoVar+['User_LSD']).count() / PsychDrug.groupby(DemoVar).count())
+    # Johranna: Alternative zur oberen Zeile, damit CondProbTable übersichtlicher ist: 
+    #CondProbTable = (PsychDrug.groupby(DemoVar+['User_LSD']).size() / PsychDrug.groupby(DemoVar).size())
     for index, row in CondProbTable.iterrows():
         list_inner = []
         for ind in index:
@@ -308,3 +310,39 @@ model.bake()
 model.probability([['Doctorate Degree', 'Female', '25-34','UK', False]])
 
 model.structure
+
+#----------------------------------------------
+
+# TESTING AREA - Johanna - Learning of Network Structure with promodoro
+
+DemoVar = ['Education','Gender', 'Age','Country']
+Big5Var = ['Nscore','Escore','Oscore','Ascore','Cscore']
+DepVar = ['User_LSD', 'User_Alcohol']
+
+# Approach 1: Exact learning
+test_df = PsychDrug[DemoVar+DepVar]
+# Documentation for 'from_samples': https://pomegranate.readthedocs.io/en/latest/BayesianNetwork.html?highlight=from_samples#pomegranate.BayesianNetwork.BayesianNetwork.from_samples
+model = BayesianNetwork.from_samples(test_df, algorithm='exact')
+    #with algorithm='chow-liu' -> approximate method with Chow-Liu trees
+    #with no algorithm='...' -> default is greedy algorithm
+#p1 = model.log_probability(test_df).sum() # does not work - test_df has to be completely Boolean
+print(model.structure)
+model.plot() #package 'pygraphviz' needed for this - does not work for me yet
+
+
+# Approach 2: Constraint learning (with priors / conditional probabilities)
+# Calculate conditional probabilities
+CondProbTable_UserLSD = (PsychDrug.groupby(DemoVar+DepVar[:1]).size() / PsychDrug.groupby(DemoVar).size())
+CondProbTable_UserLSD_list = CondProbTable_UserLSD.reset_index().values.tolist()
+# Discrete distributions for indipendent variables
+for var in DemoVar:
+    probabilities = PsychDrug.groupby(var).size() / 1885
+    exec(f'{var} = DiscreteDistribution(probabilities.to_dict())')
+
+# Monty is dependent on both the guest and the prize. 
+User_LSD = ConditionalProbabilityTable(CondProbTable_UserLSD_list, 
+                                    [Education, Gender, Age, Country])
+
+# now edges would be set based on our constrained beliefs (e.g. drug consumption based on Big5, not vice versa)
+
+
