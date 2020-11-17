@@ -336,7 +336,7 @@ model = BayesianNetwork.from_samples(test_df, algorithm='greedy')
 model.plot()
 model.log_probability(test_df.to_numpy()).sum() 
 
-# Approximate learning: Greedy algorithm
+# Approximate learning: Chow-Liu tree algorithm
 model = BayesianNetwork.from_samples(test_df, algorithm='chow-liu')
 model.plot()
 model.log_probability(test_df.to_numpy()).sum() 
