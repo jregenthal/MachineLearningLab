@@ -16,6 +16,8 @@ import seaborn as sns
 from scipy.stats import chi2_contingency
 from matplotlib import patches as mpatches
 from pomegranate import *
+from pomegranate.utils import plot_networkx
+import networkx
 
 #----------------------1.Reading and cleaning data-------------------------------
 
@@ -260,19 +262,8 @@ DemoVar = ['Education','Gender', 'Age','Country']
 #PredVar = PsychVar + DemoVar
 
 # Producing a table of conditional probabilities
-list_outer = []
-#while DemoVar != []:
-#    print(DemoVar)
-    CondProbTable = (PsychDrug.groupby(DemoVar+['User_LSD']).count() / PsychDrug.groupby(DemoVar).count())
-    # Johranna: Alternative zur oberen Zeile, damit CondProbTable übersichtlicher ist: 
-    #CondProbTable = (PsychDrug.groupby(DemoVar+['User_LSD']).size() / PsychDrug.groupby(DemoVar).size())
-    for index, row in CondProbTable.iterrows():
-        list_inner = []
-        for ind in index:
-            list_inner.append(ind)
-        list_inner.append(row.min())
-        list_outer.append(list_inner)
-#    DemoVar.pop()
+CondProbTable = (PsychDrug.groupby(DemoVar+['User_LSD']).size() / PsychDrug.groupby(DemoVar).size())
+list_outer = CondProbTable.reset_index().values.tolist()
 
 # The guests initial door selection is completely random
 Education = DiscreteDistribution({'Education': 1/5, 'Gender': 1/5, 'Age': 1/5, 'Country': 1/5, 'User_LSD': 1/5})
@@ -313,24 +304,77 @@ model.structure
 
 #----------------------------------------------
 
-# TESTING AREA - Johanna - Learning of Network Structure with promodoro
+# TESTING AREA - Johanna - Learning of Network Structure with pomegranate
 
-DemoVar = ['Education','Gender', 'Age','Country']
+DemoVar = ['Education','Gender', 'Age']
 Big5Var = ['Nscore','Escore','Oscore','Ascore','Cscore']
-DepVar = ['User_LSD', 'User_Alcohol']
+#PsychoVar = ['Impulsiv', 'SS']
+DrugVar = ['User_LSD', 'User_Alcohol']
 
-# Approach 1: Exact learning
-test_df = PsychDrug[DemoVar+DepVar]
-# Documentation for 'from_samples': https://pomegranate.readthedocs.io/en/latest/BayesianNetwork.html?highlight=from_samples#pomegranate.BayesianNetwork.BayesianNetwork.from_samples
+test_df = PsychDrug[DemoVar+
+                    Big5Var+
+                    DrugVar]
+
+# Rounding the score variables, so we do not have continous variables anymore
+test_df = test_df.round(1)
+
+
+# Approach 1: Learning the structure from scratch
+
+# Exact learning: Traditional shortest path algorithm
+model = BayesianNetwork.from_samples(test_df, algorithm='exact-dp')
+model.plot()
+model.log_probability(test_df.to_numpy()).sum() 
+
+# Exact learning: A* algorithm
 model = BayesianNetwork.from_samples(test_df, algorithm='exact')
-    #with algorithm='chow-liu' -> approximate method with Chow-Liu trees
-    #with no algorithm='...' -> default is greedy algorithm
-#p1 = model.log_probability(test_df).sum() # does not work - test_df has to be completely Boolean
-print(model.structure)
-model.plot() #package 'pygraphviz' needed for this - does not work for me yet
+model.plot()
+model.log_probability(test_df.to_numpy()).sum() 
+
+# Approximate learning: Greedy algorithm
+model = BayesianNetwork.from_samples(test_df, algorithm='greedy')
+model.plot()
+model.log_probability(test_df.to_numpy()).sum() 
+
+# Approximate learning: Greedy algorithm
+model = BayesianNetwork.from_samples(test_df, algorithm='chow-liu')
+model.plot()
+model.log_probability(test_df.to_numpy()).sum() 
+
 
 
 # Approach 2: Constraint learning (with priors / conditional probabilities)
+
+
+# Create scaffold of network
+demographics = tuple(range(0, len(DemoVar))) #['Education','Gender', 'Age']
+psycho_traits = tuple(range(max(demographics) + 1, max(demographics) + len(Big5Var) + 1)) #['Nscore','Escore','Oscore','Ascore','Cscore']
+drug_consumption = tuple(range(max(psycho_traits) + 1, max(psycho_traits) + len(DrugVar) + 1)) #['User_LSD', 'User_Alcohol']
+
+G = networkx.DiGraph()
+
+G.add_edge(demographics, psycho_traits)
+G.add_edge(psycho_traits, psycho_traits) #self-loop
+G.add_edge(psycho_traits, drug_consumption)
+G.add_edge(drug_consumption, drug_consumption) #drug_consumption
+
+plot_networkx(G)
+
+# Calculate model
+model = BayesianNetwork.from_samples(test_df.to_numpy(), 
+                                     algorithm='exact', 
+                                     constraint_graph=G)
+model.plot()
+model.log_probability(test_df.to_numpy()).sum() 
+
+# Dictionary for network nodes to read network plot
+for i, var in enumerate(DemoVar+Big5Var+DrugVar):
+    print(i, ': ', var)
+
+
+
+################################################
+
 # Calculate conditional probabilities
 CondProbTable_UserLSD = (PsychDrug.groupby(DemoVar+DepVar[:1]).size() / PsychDrug.groupby(DemoVar).size())
 CondProbTable_UserLSD_list = CondProbTable_UserLSD.reset_index().values.tolist()
@@ -341,8 +385,11 @@ for var in DemoVar:
 
 # Monty is dependent on both the guest and the prize. 
 User_LSD = ConditionalProbabilityTable(CondProbTable_UserLSD_list, 
-                                    [Education, Gender, Age, Country])
+                                       DemoVar)
 
-# now edges would be set based on our constrained beliefs (e.g. drug consumption based on Big5, not vice versa)
+
+
+
+
 
 
