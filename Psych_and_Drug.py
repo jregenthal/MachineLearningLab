@@ -7,7 +7,7 @@ Due date:
 '''
 
 #-----------------------0.Preliminaries-----------------------------------------
-
+#%%
 import numpy as np
 import pandas as pd
 from sklearn.preprocessing import LabelEncoder
@@ -106,7 +106,7 @@ PsychDrug['Gender'] = mapping(PsychDrug,'Gender')
 PsychDrug['Education'] = mapping(PsychDrug,'Education')
 PsychDrug['Country'] = mapping(PsychDrug,'Country')
 PsychDrug['Ethnicity'] = mapping(PsychDrug,'Ethnicity')
-
+#%%
 #---------------------2. Exploratory analysis------------------------------------
 # Imported from https://github.com/deepak525/Drug-Consumption/blob/master/drug.ipynb
 
@@ -227,84 +227,12 @@ f.suptitle('Big Five for users and non-users of illegal drugs (decade-based)')
 
 for boxplot in range(5):
     axes[boxplot].yaxis.set_visible(False)
-    
-
-# Visualization of Big Five scores for users and non-users of illegal drugs
-# Separate plots
-
-sns.catplot(y = 'Nscore', x = 'User_IllegalDrugs', data = PsychDrug, kind="box") 
-sns.catplot(y = 'Escore', x = 'User_IllegalDrugs', data = PsychDrug, kind="box") 
-sns.catplot(y = 'Oscore', x = 'User_IllegalDrugs', data = PsychDrug, kind="box") 
-sns.catplot(y = 'Ascore', x = 'User_IllegalDrugs', data = PsychDrug, kind="box") 
-sns.catplot(y = 'Cscore', x = 'User_IllegalDrugs', data = PsychDrug, kind="box") 
-
-# Visualization of a contious variable for a certain subset
-# For example: Big Five for users of illegal drugs
-    
-subset = PsychDrug[PsychDrug['User_IllegalDrugs']==True]
-
-f, axes = plt.subplots(5, 1, sharex=True, sharey=True)
-f.subplots_adjust(hspace=.75)
-
-sns.boxplot(x = 'Nscore', data = subset, ax = axes[0])
-sns.boxplot(x = 'Escore', data = subset, ax = axes[1])
-sns.boxplot(x = 'Oscore', data = subset, ax = axes[2])
-sns.boxplot(x = 'Ascore', data = subset, ax = axes[3])
-sns.boxplot(x = 'Cscore', data = subset, ax = axes[4])
-    
+#%%
 #----------------------------------3. Bayesian Network--------------------
 
 #----------------------------------3.1 Conditional Probabilities--------------------
 
-# TESTING AREA - Sofija
-
-DemoVar = ['Education','Gender', 'Age','Country']
-#PredVar = PsychVar + DemoVar
-
-# Producing a table of conditional probabilities
-CondProbTable = (PsychDrug.groupby(DemoVar+['User_LSD']).size() / PsychDrug.groupby(DemoVar).size())
-list_outer = CondProbTable.reset_index().values.tolist()
-
-# The guests initial door selection is completely random
-Education = DiscreteDistribution({'Education': 1/5, 'Gender': 1/5, 'Age': 1/5, 'Country': 1/5, 'User_LSD': 1/5})
-Gender = DiscreteDistribution({'Education': 1/5, 'Gender': 1/5, 'Age': 1/5, 'Country': 1/5, 'User_LSD': 1/5})
-Age = DiscreteDistribution({'Education': 1/5, 'Gender': 1/5, 'Age': 1/5, 'Country': 1/5, 'User_LSD': 1/5})
-Country = DiscreteDistribution({'Education': 1/5, 'Gender': 1/5, 'Age': 1/5, 'Country': 1/5, 'User_LSD': 1/5})
-User_LSD = DiscreteDistribution({'Education': 1/5, 'Gender': 1/5, 'Age': 1/5, 'Country': 1/5, 'User_LSD': 1/5})
-
-# Monty is dependent on both the guest and the prize. 
-monty = ConditionalProbabilityTable(list_outer, [Education, Gender, Age, Country, User_LSD])
-
-# State objects hold both the distribution, and a high level name.
-s1 = State(Education, name="Education")
-s2 = State(Gender, name="Gender")
-s3 = State(Age, name="Age")
-s4 = State(Country, name="Country")
-s5 = State(User_LSD, name="User_LSD")
-
-# Create the Bayesian network object with a useful name
-model = BayesianNetwork("Monty Hall Problem")
-
-# Add the three states to the network 
-model.add_states(s1, s2, s3, s4, s5)
-
-
-# Add edges which represent conditional dependencies, where the second node is 
-# conditionally dependent on the first node (Monty is dependent on both guest and prize)
-model.add_edge(s1, s5)
-model.add_edge(s2, s5)
-model.add_edge(s3, s5)
-model.add_edge(s4, s5)
-
-model.bake()
-
-model.probability([['Doctorate Degree', 'Female', '25-34','UK', False]])
-
-model.structure
-
-#----------------------------------------------
-
-# TESTING AREA - Johanna - Learning of Network Structure with pomegranate
+# TESTING AREA - Learning of Network Structure with pomegranate
 
 DemoVar = ['Education','Gender', 'Age']
 Big5Var = ['Nscore','Escore','Oscore','Ascore','Cscore']
@@ -316,7 +244,7 @@ test_df = PsychDrug[DemoVar+
                     DrugVar]
 
 # Rounding the score variables, so we do not have continous variables anymore
-test_df = test_df.round(1)
+test_df = test_df.round()
 
 
 # Approach 1: Learning the structure from scratch
@@ -340,7 +268,6 @@ model.log_probability(test_df.to_numpy()).sum()
 model = BayesianNetwork.from_samples(test_df, algorithm='chow-liu')
 model.plot()
 model.log_probability(test_df.to_numpy()).sum() 
-
 
 
 # Approach 2: Constraint learning (with priors / conditional probabilities)
@@ -380,7 +307,7 @@ CondProbTable_UserLSD = (PsychDrug.groupby(DemoVar+DepVar[:1]).size() / PsychDru
 CondProbTable_UserLSD_list = CondProbTable_UserLSD.reset_index().values.tolist()
 # Discrete distributions for indipendent variables
 for var in DemoVar:
-    probabilities = PsychDrug.groupby(var).size() / 1885
+    probabilities = PsychDrug.groupby(var).size() / len(PsychDrug)
     exec(f'{var} = DiscreteDistribution(probabilities.to_dict())')
 
 # Monty is dependent on both the guest and the prize. 
