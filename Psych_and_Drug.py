@@ -283,7 +283,7 @@ G = networkx.DiGraph()
 G.add_edge(demographics, psycho_traits)
 G.add_edge(psycho_traits, psycho_traits) #self-loop
 G.add_edge(psycho_traits, drug_consumption)
-G.add_edge(drug_consumption, drug_consumption) #drug_consumption
+G.add_edge(drug_consumption, drug_consumption) #self-loop
 
 plot_networkx(G)
 
@@ -303,7 +303,7 @@ for i, var in enumerate(DemoVar+Big5Var+DrugVar):
 ################################################
 
 # Calculate conditional probabilities
-CondProbTable_UserLSD = (PsychDrug.groupby(DemoVar+DepVar[:1]).size() / PsychDrug.groupby(DemoVar).size())
+CondProbTable_UserLSD = (test_df.groupby(['User_Alcohol', 'User_LSD']).size() / test_df.groupby('User_LSD').size())
 CondProbTable_UserLSD_list = CondProbTable_UserLSD.reset_index().values.tolist()
 # Discrete distributions for indipendent variables
 for var in DemoVar:
