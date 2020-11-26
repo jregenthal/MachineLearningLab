@@ -272,7 +272,6 @@ model.log_probability(test_df.to_numpy()).sum()
 
 # Approach 2: Constraint learning (with priors / conditional probabilities)
 
-
 # Create scaffold of network
 demographics = tuple(range(0, len(DemoVar))) #['Education','Gender', 'Age']
 psycho_traits = tuple(range(max(demographics) + 1, max(demographics) + len(Big5Var) + 1)) #['Nscore','Escore','Oscore','Ascore','Cscore']
@@ -298,19 +297,24 @@ model.log_probability(test_df.to_numpy()).sum()
 for i, var in enumerate(DemoVar+Big5Var+DrugVar):
     print(i, ': ', var)
 
+model.structure
 
+# Prediction with loopy belief propogation (= approximate version of the forward-backward algorithm)
+model.predict_proba({})
+model.predict_proba([{'0':'University Degree', '1':'Female', '2':'25-34', '3':1.0, '4':1.0, '5':1.0, '6':1.0, '7':1.0, '9':False}])
 
 ################################################
 
 # Calculate conditional probabilities
 CondProbTable_UserLSD = (test_df.groupby(['User_Alcohol', 'User_LSD']).size() / test_df.groupby('User_LSD').size())
 CondProbTable_UserLSD_list = CondProbTable_UserLSD.reset_index().values.tolist()
-# Discrete distributions for indipendent variables
+
+# Create discrete distributions for independent variables
 for var in DemoVar:
     probabilities = PsychDrug.groupby(var).size() / len(PsychDrug)
     exec(f'{var} = DiscreteDistribution(probabilities.to_dict())')
 
-# Monty is dependent on both the guest and the prize. 
+# Create CPT
 User_LSD = ConditionalProbabilityTable(CondProbTable_UserLSD_list, 
                                        DemoVar)
 
