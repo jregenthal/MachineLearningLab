@@ -13,7 +13,7 @@ import pandas as pd
 from sklearn.preprocessing import LabelEncoder
 import matplotlib.pyplot as plt
 import seaborn as sns
-from scipy.stats import chi2_contingency
+from scipy.stats import chi2_contingency, norm, multinomial
 from matplotlib import patches as mpatches
 from pomegranate import *
 from pomegranate.utils import plot_networkx
@@ -228,7 +228,7 @@ f.suptitle('Big Five for users and non-users of illegal drugs (decade-based)')
 for boxplot in range(5):
     axes[boxplot].yaxis.set_visible(False)
 #%%
-#----------------------------------3. Bayesian Network--------------------
+#----------------------------------3. Bayesian Network with pomegranate--------------------
 
 #----------------------------------3.1 Conditional Probabilities--------------------
 
@@ -319,8 +319,69 @@ User_LSD = ConditionalProbabilityTable(CondProbTable_UserLSD_list,
                                        DemoVar)
 
 
+#%%
+#----------------------------------4. Bayesian Network from scratch--------------------
 
+#----------------------------------4.1 Bayesian Structure Learning---------------------
 
+def calc_independent_loglikelihood_var_cont(variable):
+    avg = np.mean(PsychDrug[variable])
+    std = np.std(PsychDrug[variable])
+    return np.sum(norm.logpdf(PsychDrug[variable], avg, std))
 
+def calc_independent_loglikelihood_var_disc(variable):
+    x = PsychDrug.groupby([variable]).size()
+    n = len(PsychDrug[variable])
+    p = PsychDrug.groupby([variable]).size() / len(PsychDrug)
+    return np.sum(multinomial.logpmf(x.tolist(),n,p.tolist()))
 
+likelihood = calc_independent_loglikelihood_var_disc('Education')
+likelihood = calc_independent_loglikelihood_var_cont('Oscore')
 
+# Imported from https://github.com/darshanbagul/BayesianNetworks/blob/master/report_utils.py
+def calc_cond_prob_one_var_cont(y, x):
+    sq_temp = np.dot(x, np.vstack(x))
+    l1 = [len(x) , np.sum(x)]
+    l2 = [np.sum(x), sq_temp[0]]
+    A = np.vstack([l1, l2])
+    y_mod = [np.sum(y), np.dot(x,y)]
+
+    A_inv = np.linalg.inv(A)
+    B  = np.dot(A_inv, y_mod)
+
+    var_temp = 0
+    for i in range(len(y)):
+        var_temp += np.square((B[0] + (B[1] * x[i])) - y[i])
+
+    var = var_temp/len(y)
+    sigma = np.sqrt(var)
+    log_likelihood = 0
+    for i in range(len(y)):
+        log_likelihood += norm.logpdf(y[i], B[0]+B[1]*x[i], sigma)
+    return log_likelihood
+
+def calc_cond_prob_one_var_disc(y,variable):
+    x = PsychDrug.groupby([variable,y]).size()
+    n = len(PsychDrug)
+    p = PsychDrug.groupby([variable,y]).size() / len(PsychDrug)
+    return np.sum(multinomial.logpmf(x.tolist(),n,p.tolist()))
+
+likelihood = calc_cond_prob_one_var_cont(PsychDrug["Escore"], PsychDrug["Oscore"])
+likelihood = calc_cond_prob_one_var_disc(PsychDrug["User_LSD"], PsychDrug["Education"])
+
+#-------------------------------------------------------------------------------------
+
+#  Computing log likelihood of one variable
+# For each sample distance, compute the probability modeled by the parameter guesses
+
+def gaussian_model (x, mu, sigma):
+    coeff_part = 1/(np.sqrt(2 * np.pi * sigma**2))
+    exp_part = np.exp( - (x - mu)**2/ (2*sigma**2) )
+    return coeff_part*exp_part
+
+probs = np.zeros(len(PsychDrug["Oscore"]))
+for n, distance in enumerate(PsychDrug["Oscore"]):
+    probs[n] = gaussian_model(distance, mu = np.mean(PsychDrug["Oscore"]), sigma = np.std(PsychDrug["Oscore"]))
+
+# Compute and print the log-likelihood as the sum() of the log() of the probabilities
+loglikelihood = np.sum(np.log(probs))
