@@ -18,6 +18,7 @@ from matplotlib import patches as mpatches
 from pomegranate import *
 from pomegranate.utils import plot_networkx
 import networkx
+from itertools import combinations, chain
 
 #----------------------1.Reading and cleaning data-------------------------------
 
@@ -246,7 +247,7 @@ test_df = PsychDrug[DemoVar+
 # Rounding the score variables, so we do not have continous variables anymore
 test_df = test_df.round()
 
-
+#%%
 # Approach 1: Learning the structure from scratch
 
 # Exact learning: Traditional shortest path algorithm
@@ -324,23 +325,61 @@ User_LSD = ConditionalProbabilityTable(CondProbTable_UserLSD_list,
 
 #----------------------------------4.1 Bayesian Structure Learning---------------------
 
+#----------------------------------4.1. For discrete variables-------------------------
+
+def calc_independent_loglikelihood_var_disc(variable):
+    x = test_df.groupby([variable]).size()
+    n = len(test_df[variable])
+    p = test_df.groupby([variable]).size() / len(test_df)
+    return np.sum(multinomial.logpmf(x.tolist(),n,p.tolist()))
+
+def calc_cond_prob_disc(list):
+    x = test_df.groupby(list).size()
+    n = len(test_df)
+    p = test_df.groupby(list).size() / len(test_df)
+    return np.sum(multinomial.logpmf(x.tolist(),n,p.tolist()))
+
+# Hill-climbing algorithm
+def powerset(variables):
+    all_combinations = []
+    for r in range(1,len(variables)+1):
+        combinations_object = combinations(variables, r)
+        combinations_list = list(combinations_object)
+        all_combinations += combinations_list
+    return(all_combinations)
+
+def hill_climbing_algorithm(target_variable):
+    output = {}
+    variable_list = [target_variable] + Big5Var + DemoVar
+    for combo in powerset(variable_list):
+        data_likelihood = 0
+        edge = False
+        if (combo[0] == target_variable) & (len(combo)>1):
+            for subset in combo:
+                data_likelihood += calc_independent_loglikelihood_var_disc(subset)
+            cond_likelihood = calc_cond_prob_disc(list(combo))
+            if cond_likelihood > data_likelihood:
+                edge = True
+            output[combo] = [data_likelihood,cond_likelihood, edge]
+    return output                        
+    
+result1 = hill_climbing_algorithm('User_LSD')
+result2 = hill_climbing_algorithm('User_Alcohol')
+
+#----------------------------------4.1. For continuous variables-------------------------
+
 def calc_independent_loglikelihood_var_cont(variable):
     avg = np.mean(PsychDrug[variable])
     std = np.std(PsychDrug[variable])
     return np.sum(norm.logpdf(PsychDrug[variable], avg, std))
 
-def calc_independent_loglikelihood_var_disc(variable):
-    x = PsychDrug.groupby([variable]).size()
-    n = len(PsychDrug[variable])
-    p = PsychDrug.groupby([variable]).size() / len(PsychDrug)
-    return np.sum(multinomial.logpmf(x.tolist(),n,p.tolist()))
-
-likelihood = calc_independent_loglikelihood_var_disc('Education')
 likelihood = calc_independent_loglikelihood_var_cont('Oscore')
 
 # Imported from https://github.com/darshanbagul/BayesianNetworks/blob/master/report_utils.py
 def calc_cond_prob_one_var_cont(y, x):
-    sq_temp = np.dot(x, np.vstack(x))
+    #x = PsychDrug['Oscore']
+    #y = PsychDrug['Escore']
+    sq_temp = np.dot(x, np.vstack(x)) # temp^2 = x^T * x
     l1 = [len(x) , np.sum(x)]
     l2 = [np.sum(x), sq_temp[0]]
     A = np.vstack([l1, l2])
@@ -360,28 +399,14 @@ def calc_cond_prob_one_var_cont(y, x):
         log_likelihood += norm.logpdf(y[i], B[0]+B[1]*x[i], sigma)
     return log_likelihood
 
-def calc_cond_prob_one_var_disc(y,variable):
-    x = PsychDrug.groupby([variable,y]).size()
-    n = len(PsychDrug)
-    p = PsychDrug.groupby([variable,y]).size() / len(PsychDrug)
-    return np.sum(multinomial.logpmf(x.tolist(),n,p.tolist()))
-
 likelihood = calc_cond_prob_one_var_cont(PsychDrug["Escore"], PsychDrug["Oscore"])
-likelihood = calc_cond_prob_one_var_disc(PsychDrug["User_LSD"], PsychDrug["Education"])
 
-#-------------------------------------------------------------------------------------
+# Testing
+a = np.array(PsychDrug['Escore'])
+b = np.array(PsychDrug['Oscore'])
+test = np.row_stack((b,a))
+np.cov(test)
 
-#  Computing log likelihood of one variable
-# For each sample distance, compute the probability modeled by the parameter guesses
+#----------------------------------4.1. For mixed variables-------------------------
 
-def gaussian_model (x, mu, sigma):
-    coeff_part = 1/(np.sqrt(2 * np.pi * sigma**2))
-    exp_part = np.exp( - (x - mu)**2/ (2*sigma**2) )
-    return coeff_part*exp_part
-
-probs = np.zeros(len(PsychDrug["Oscore"]))
-for n, distance in enumerate(PsychDrug["Oscore"]):
-    probs[n] = gaussian_model(distance, mu = np.mean(PsychDrug["Oscore"]), sigma = np.std(PsychDrug["Oscore"]))
-
-# Compute and print the log-likelihood as the sum() of the log() of the probabilities
-loglikelihood = np.sum(np.log(probs))
+# L(data|model) = L(P(y|x)|model) where y is discrete and x is continuous
