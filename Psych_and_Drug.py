@@ -325,7 +325,7 @@ User_LSD = ConditionalProbabilityTable(CondProbTable_UserLSD_list,
 
 #----------------------------------4.1 Bayesian Structure Learning---------------------
 
-#----------------------------------4.1. For discrete variables-------------------------
+#----------------------------------4.1.1. For discrete variables-------------------------
 
 def calc_independent_loglikelihood_var_disc(variable):
     x = test_df.groupby([variable]).size()
@@ -366,7 +366,7 @@ def hill_climbing_algorithm(target_variable):
 result1 = hill_climbing_algorithm('User_LSD')
 result2 = hill_climbing_algorithm('User_Alcohol')
 
-#----------------------------------4.1. For continuous variables-------------------------
+#----------------------------------4.1.2. For continuous variables-------------------------
 
 def calc_independent_loglikelihood_var_cont(variable):
     avg = np.mean(PsychDrug[variable])
@@ -407,6 +407,6 @@ b = np.array(PsychDrug['Oscore'])
 test = np.row_stack((b,a))
 np.cov(test)
 
-#----------------------------------4.1. For mixed variables-------------------------
+#----------------------------------4.1.3. For mixed variables-------------------------
 
 # L(data|model) = L(P(y|x)|model) where y is discrete and x is continuous
