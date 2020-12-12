@@ -11,6 +11,8 @@ Due date:
 import numpy as np
 import pandas as pd
 from sklearn.preprocessing import LabelEncoder
+from sklearn.model_selection import train_test_split
+from sklearn import metrics
 import matplotlib.pyplot as plt
 import seaborn as sns
 from scipy.stats import chi2_contingency, norm, multinomial
@@ -19,6 +21,8 @@ from pomegranate import *
 from pomegranate.utils import plot_networkx
 import networkx
 from itertools import combinations, chain
+
+
 
 #----------------------1.Reading and cleaning data-------------------------------
 
@@ -231,47 +235,97 @@ for boxplot in range(5):
 #%%
 #----------------------------------3. Bayesian Network with pomegranate--------------------
 
-#----------------------------------3.1 Conditional Probabilities--------------------
+def prediction_matrix(model, X_test, y_test):
+    # rename X_test columns to fit to model nodes
+    X_test_nodes = X_test.round() # Discretization
+    X_test_nodes.columns = [str(no) for no in np.arange(len(X_test_nodes.columns))]
+    
+    y_pred = []
+    # loop over all record in the X_test_nodes nodes (where each record is one dictionary)
+    for record in X_test_nodes.to_dict('records'):
+        prediction = model.predict_proba(record)
 
-# TESTING AREA - Learning of Network Structure with pomegranate
+        record_pred = []
+        for i in range(len(y_test.columns)):
+            no_node = len(X_test.columns) + i
+            record_pred.append(prediction[no_node].parameters[0][1])
+            
+        #print(record_pred)
+        y_pred.append(record_pred)
+    
+    y_pred = pd.DataFrame(y_pred, columns=[DrugVar]).set_index(y_test.index)
+    
+    return y_pred
+       
+
+def prediction_metrics(drug, y_pred, y_test):
+    predicted_values = y_pred[[drug]].round().values.tolist()
+    true_values = y_test[drug].tolist()
+    
+    confusion_matrix = metrics.confusion_matrix(true_values, predicted_values)
+    sensitivity = confusion_matrix[0,0] / (confusion_matrix[0,0] + confusion_matrix[1,0]) # TP / (TP + FN)
+    specifity = confusion_matrix[1,1] / (confusion_matrix[0,1] + confusion_matrix[1,1]) # TN / (TN + FP)
+    
+    print("Confusion_matrix:\n", confusion_matrix,
+          "\nAccuracy: ", metrics.accuracy_score(true_values, predicted_values).round(2),
+          "\nSensitivity: ", round(sensitivity, 2),
+          "\nSpecifity: ", round(specifity, 2))
+
+
+#----------------------------------3.1 Initialization, Split into Training & Test Data--------------------
 
 DemoVar = ['Education','Gender', 'Age']
-Big5Var = ['Nscore','Escore','Oscore','Ascore','Cscore']
-#PsychoVar = ['Impulsiv', 'SS']
+Big5Var = ['Nscore','Escore','Oscore','Ascore','Cscore'] #+ ['Impulsiv', 'SS']
 DrugVar = ['User_LSD', 'User_Alcohol']
 
-test_df = PsychDrug[DemoVar+
-                    Big5Var+
-                    DrugVar]
+# Split into train and test data
+X_train, X_test, y_train, y_test = train_test_split(PsychDrug[DemoVar + Big5Var], 
+                                                    PsychDrug[DrugVar], 
+                                                    test_size=0.33, 
+                                                    random_state=53)
 
 # Rounding the score variables, so we do not have continous variables anymore
-test_df = test_df.round()
+train_df = X_train.join(y_train).round()
+
 
 #%%
-# Approach 1: Learning the structure from scratch
+#----------------------------------3.2 Learning the structure with pomegranate from scratch---------------
+
+#----------------------------------3.2.1 Approach 1: From scratch with pomegranate---------------
+
 
 # Exact learning: Traditional shortest path algorithm
-model = BayesianNetwork.from_samples(test_df, algorithm='exact-dp')
+model = BayesianNetwork.from_samples(train_df, algorithm='exact-dp')
 model.plot()
-model.log_probability(test_df.to_numpy()).sum() 
+model.log_probability(train_df.to_numpy()).sum() 
+y_pred = prediction_matrix(model, X_test, y_test)
+prediction_metrics('User_LSD', y_pred, y_test)
 
 # Exact learning: A* algorithm
-model = BayesianNetwork.from_samples(test_df, algorithm='exact')
+model = BayesianNetwork.from_samples(train_df, algorithm='exact')
 model.plot()
-model.log_probability(test_df.to_numpy()).sum() 
+model.log_probability(train_df.to_numpy()).sum() 
+y_pred = prediction_matrix(model, X_test, y_test)
+prediction_metrics('User_LSD', y_pred, y_test)
 
 # Approximate learning: Greedy algorithm
-model = BayesianNetwork.from_samples(test_df, algorithm='greedy')
+model = BayesianNetwork.from_samples(train_df, algorithm='greedy')
 model.plot()
-model.log_probability(test_df.to_numpy()).sum() 
+model.log_probability(train_df.to_numpy()).sum() 
+y_pred = prediction_matrix(model, X_test, y_test)
+prediction_metrics('User_LSD', y_pred, y_test)
 
 # Approximate learning: Chow-Liu tree algorithm
-model = BayesianNetwork.from_samples(test_df, algorithm='chow-liu')
+model = BayesianNetwork.from_samples(train_df, algorithm='chow-liu')
 model.plot()
-model.log_probability(test_df.to_numpy()).sum() 
+model.log_probability(train_df.to_numpy()).sum() 
+y_pred = prediction_matrix(model, X_test, y_test)
+prediction_metrics('User_LSD', y_pred, y_test)
 
 
-# Approach 2: Constraint learning (with priors / conditional probabilities)
+#%%
+#-----------------------------3.2.1 Approach 2: Constraint learning (with priors / conditional probabilities)---------------
+
 
 # Create scaffold of network
 demographics = tuple(range(0, len(DemoVar))) #['Education','Gender', 'Age']
@@ -288,26 +342,37 @@ G.add_edge(drug_consumption, drug_consumption) #self-loop
 plot_networkx(G)
 
 # Calculate model
-model = BayesianNetwork.from_samples(test_df.to_numpy(), 
+model = BayesianNetwork.from_samples(train_df.to_numpy(), 
                                      algorithm='exact', 
                                      constraint_graph=G)
 model.plot()
-model.log_probability(test_df.to_numpy()).sum() 
+model.log_probability(train_df.to_numpy()).sum() 
 
 # Dictionary for network nodes to read network plot
 for i, var in enumerate(DemoVar+Big5Var+DrugVar):
-    print(i, ': ', var)
+    #print(i, ': ', var)
+    print(var, ': ', i)
 
 model.structure
 
-# Prediction with loopy belief propogation (= approximate version of the forward-backward algorithm)
-model.predict_proba({})
-model.predict_proba([{'0':'University Degree', '1':'Female', '2':'25-34', '3':1.0, '4':1.0, '5':1.0, '6':1.0, '7':1.0, '9':False}])
 
-################################################
+# Prediction with loopy belief propogation (= approximate version of the forward-backward algorithm)
+
+# Example prediction
+model.predict_proba({})
+model.predict_proba([{'0':'University Degree', '1':'Female', '2':'25-34', '3':1.0, '4':1.0, '5':1.0, '6':1.0, '7':1.0}])
+
+# Prediction of the X_test data
+y_pred = prediction_matrix(model, X_test, y_test)
+prediction_metrics('User_LSD', y_pred, y_test)
+
+
+
+#-----------------------------Calculation of conditional probabilities)---------------
+
 
 # Calculate conditional probabilities
-CondProbTable_UserLSD = (test_df.groupby(['User_Alcohol', 'User_LSD']).size() / test_df.groupby('User_LSD').size())
+CondProbTable_UserLSD = (train_df.groupby(['User_Alcohol', 'User_LSD']).size() / train_df.groupby('User_LSD').size())
 CondProbTable_UserLSD_list = CondProbTable_UserLSD.reset_index().values.tolist()
 
 # Create discrete distributions for independent variables
@@ -328,15 +393,15 @@ User_LSD = ConditionalProbabilityTable(CondProbTable_UserLSD_list,
 #----------------------------------4.1.1. For discrete variables-------------------------
 
 def calc_independent_loglikelihood_var_disc(variable):
-    x = test_df.groupby([variable]).size()
-    n = len(test_df[variable])
-    p = test_df.groupby([variable]).size() / len(test_df)
+    x = train_df.groupby([variable]).size()
+    n = len(train_df[variable])
+    p = train_df.groupby([variable]).size() / len(train_df)
     return np.sum(multinomial.logpmf(x.tolist(),n,p.tolist()))
 
 def calc_cond_prob_disc(list):
-    x = test_df.groupby(list).size()
-    n = len(test_df)
-    p = test_df.groupby(list).size() / len(test_df)
+    x = train_df.groupby(list).size()
+    n = len(train_df)
+    p = train_df.groupby(list).size() / len(train_df)
     return np.sum(multinomial.logpmf(x.tolist(),n,p.tolist()))
 
 # Hill-climbing algorithm
