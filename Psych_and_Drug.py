@@ -300,6 +300,8 @@ model.plot()
 model.log_probability(train_df.to_numpy()).sum() 
 y_pred = prediction_matrix(model, X_test, y_test)
 prediction_metrics('User_LSD', y_pred, y_test)
+prediction_metrics('User_Alcohol', y_pred, y_test)
+
 
 # Exact learning: A* algorithm
 model = BayesianNetwork.from_samples(train_df, algorithm='exact')
@@ -307,6 +309,8 @@ model.plot()
 model.log_probability(train_df.to_numpy()).sum() 
 y_pred = prediction_matrix(model, X_test, y_test)
 prediction_metrics('User_LSD', y_pred, y_test)
+prediction_metrics('User_Alcohol', y_pred, y_test)
+
 
 # Approximate learning: Greedy algorithm
 model = BayesianNetwork.from_samples(train_df, algorithm='greedy')
@@ -314,6 +318,8 @@ model.plot()
 model.log_probability(train_df.to_numpy()).sum() 
 y_pred = prediction_matrix(model, X_test, y_test)
 prediction_metrics('User_LSD', y_pred, y_test)
+prediction_metrics('User_Alcohol', y_pred, y_test)
+
 
 # Approximate learning: Chow-Liu tree algorithm
 model = BayesianNetwork.from_samples(train_df, algorithm='chow-liu')
@@ -321,6 +327,7 @@ model.plot()
 model.log_probability(train_df.to_numpy()).sum() 
 y_pred = prediction_matrix(model, X_test, y_test)
 prediction_metrics('User_LSD', y_pred, y_test)
+prediction_metrics('User_Alcohol', y_pred, y_test)
 
 
 #%%
@@ -348,7 +355,7 @@ model = BayesianNetwork.from_samples(train_df.to_numpy(),
 model.plot()
 model.log_probability(train_df.to_numpy()).sum() 
 
-# Dictionary for network nodes to read network plot
+# Dictionary for network nodes to read network structure
 for i, var in enumerate(DemoVar+Big5Var+DrugVar):
     #print(i, ': ', var)
     print(var, ': ', i)
@@ -365,32 +372,91 @@ model.predict_proba([{'0':'University Degree', '1':'Female', '2':'25-34', '3':1.
 # Prediction of the X_test data
 y_pred = prediction_matrix(model, X_test, y_test)
 prediction_metrics('User_LSD', y_pred, y_test)
+prediction_metrics('User_Alcohol', y_pred, y_test)
 
 
+#%%
+#-----------------------------Calculation of conditional probabilities---------------
 
-#-----------------------------Calculation of conditional probabilities)---------------
+# Prediction only from Big5 to 'User_LSD'
 
+Nscore = DiscreteDistribution((train_df.groupby(['Nscore']).size() / len(train_df)).to_dict())
+Escore = DiscreteDistribution((train_df.groupby(['Escore']).size() / len(train_df)).to_dict())
+Oscore = DiscreteDistribution((train_df.groupby(['Oscore']).size() / len(train_df)).to_dict())
+Ascore = DiscreteDistribution((train_df.groupby(['Ascore']).size() / len(train_df)).to_dict())
+Cscore = DiscreteDistribution((train_df.groupby(['Cscore']).size() / len(train_df)).to_dict())
 
-# Calculate conditional probabilities
-CondProbTable_UserLSD = (train_df.groupby(['User_Alcohol', 'User_LSD']).size() / train_df.groupby('User_LSD').size())
+CondProbTable_UserLSD = (train_df.groupby(['Nscore', 'Escore', 'Oscore', 'Ascore', 'Cscore', 'User_LSD']).size() / 
+                             train_df.groupby('User_LSD').size())
 CondProbTable_UserLSD_list = CondProbTable_UserLSD.reset_index().values.tolist()
 
-# Create discrete distributions for independent variables
-for var in DemoVar:
-    probabilities = PsychDrug.groupby(var).size() / len(PsychDrug)
-    exec(f'{var} = DiscreteDistribution(probabilities.to_dict())')
-
-# Create CPT
 User_LSD = ConditionalProbabilityTable(CondProbTable_UserLSD_list, 
-                                       DemoVar)
+                                       [Nscore, Escore, Oscore, Ascore, Cscore])
+
+s1 = Node(Nscore, name="Nscore")
+s2 = Node(Escore, name="Escore")
+s3 = Node(Oscore, name="Oscore")
+s4 = Node(Ascore, name="Ascore")
+s5 = Node(Cscore, name="Cscore")
+s6 = Node(User_LSD, name="User_LSD")
+
+model = BayesianNetwork("Big5")
+model.add_nodes(s1,s6)
+model.add_nodes(s1, s2, s3, s4, s5, s6)
+model.add_edge(s1, s6)
+model.add_edge(s2, s6)
+model.add_edge(s3, s6)
+model.add_edge(s4, s6)
+model.add_edge(s5, s6)
+model.bake()  # Fehlermeldung, da es fehlende Werte in der CondProbTable_UserLSD_list gibt
+model.plot()
 
 
 #%%
 #----------------------------------4. Bayesian Network from scratch--------------------
 
-#----------------------------------4.1 Bayesian Structure Learning---------------------
+#----------------------------------4.1 Bayesian Parameter Learning---------------------
 
-#----------------------------------4.1.1. For discrete variables-------------------------
+#----------------------------------4.2.1. For discrete variables-------------------------
+
+def calc_independent_var_disc(variable):
+    parameter = train_df.groupby([variable]).size() / len(train_df[variable])
+    return parameter
+calc_independent_var_disc('Education')
+
+def calc_cond_prob_disc(y, x1, x_label): # list = [y,x = 'Doctor'] (y has to come first)
+    p = train_df.groupby([y, x1]).size() / train_df.groupby(x1).size()  # p(y|x = 'doctor')
+    return p.filter(like = x_label, axis=0)
+calc_cond_prob_disc('User_LSD', 'Education', 'Masters Degree')
+
+
+#----------------------------------4.2.2. For continuous variables-------------------------
+
+
+def calc_independent_var_cont(variable):
+    avg = np.mean(train_df[variable])
+    std = np.std(train_df[variable])
+    return avg, std
+calc_independent_var_cont('Nscore')
+
+# Prob of an Nscore < 1
+avg, std = calc_independent_var_cont('Nscore')
+norm.cdf(1, loc=avg, scale=std)
+
+# P(y|x) = P(y ∩ x) / P(x) --- Prob with x < 1
+def calc_cond_prob_cont(y, y_event, x1, x1_event):
+    # P(y ∩ x):
+    y_and_x = len(train_df[(train_df[y] == y_event) & (train_df[x1] < x1_event)])
+    x = len(test[test[x1] < x1_event])
+    p = y_and_x / x
+    return p
+calc_cond_prob_cont('User_LSD', True, 'Nscore', 1)
+
+
+#%%
+#----------------------------------4.2 Bayesian Structure Learning---------------------
+
+#----------------------------------4.2.1. For discrete variables-------------------------
 
 def calc_independent_loglikelihood_var_disc(variable):
     x = train_df.groupby([variable]).size()
@@ -398,10 +464,11 @@ def calc_independent_loglikelihood_var_disc(variable):
     p = train_df.groupby([variable]).size() / len(train_df)
     return np.sum(multinomial.logpmf(x.tolist(),n,p.tolist()))
 
-def calc_cond_prob_disc(list):
+def calc_cond_prob_disc(list): 
     x = train_df.groupby(list).size()
     n = len(train_df)
-    p = train_df.groupby(list).size() / len(train_df)
+#   p = train_df.groupby(list).size() / len(train_df)
+    p = train_df.groupby(list).size() / train_df.groupby(list[1:]).size() 
     return np.sum(multinomial.logpmf(x.tolist(),n,p.tolist()))
 
 # Hill-climbing algorithm
@@ -431,7 +498,7 @@ def hill_climbing_algorithm(target_variable):
 result1 = hill_climbing_algorithm('User_LSD')
 result2 = hill_climbing_algorithm('User_Alcohol')
 
-#----------------------------------4.1.2. For continuous variables-------------------------
+#----------------------------------4.2.2. For continuous variables-------------------------
 
 def calc_independent_loglikelihood_var_cont(variable):
     avg = np.mean(PsychDrug[variable])
@@ -464,7 +531,7 @@ def calc_cond_prob_one_var_cont(y, x):
         log_likelihood += norm.logpdf(y[i], B[0]+B[1]*x[i], sigma)
     return log_likelihood
 
-likelihood = calc_cond_prob_one_var_cont(PsychDrug["Escore"], PsychDrug["Oscore"])
+likelihood = calc_cond_prob_one_var_cont(train_df["Escore"], train_df["Oscore"])
 
 # Testing
 a = np.array(PsychDrug['Escore'])
@@ -472,6 +539,6 @@ b = np.array(PsychDrug['Oscore'])
 test = np.row_stack((b,a))
 np.cov(test)
 
-#----------------------------------4.1.3. For mixed variables-------------------------
+#----------------------------------4.2.3. For mixed variables-------------------------
 
 # L(data|model) = L(P(y|x)|model) where y is discrete and x is continuous
