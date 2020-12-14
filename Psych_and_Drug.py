@@ -461,15 +461,26 @@ calc_cond_prob_cont('User_LSD', True, 'Nscore', 1)
 def calc_independent_loglikelihood_var_disc(variable):
     x = train_df.groupby([variable]).size()
     n = len(train_df[variable])
-    p = train_df.groupby([variable]).size() / len(train_df)
+    p = x / n
     return np.sum(multinomial.logpmf(x.tolist(),n,p.tolist()))
 
-def calc_cond_prob_disc(list): 
+def calc_cond_prob_loglikelihood_disc(list): 
     x = train_df.groupby(list).size()
-    n = len(train_df)
-#   p = train_df.groupby(list).size() / len(train_df)
-    p = train_df.groupby(list).size() / train_df.groupby(list[1:]).size() 
-    return np.sum(multinomial.logpmf(x.tolist(),n,p.tolist()))
+    p = x / train_df.groupby(list[1:]).size()
+    event_combo = x.index.droplevel(0).unique().tolist()
+    loglikelihood = 0
+    p = p.reorder_levels(order = list)
+    x = x.reorder_levels(order = list)
+    for elem in event_combo: 
+        #print(elem)
+        elem = elem if isinstance(elem, tuple) else (elem,)
+        x_element = x.loc[(slice(None),) + elem]    # e.g. -> x.loc[slice(None), 'Doctorate Degree', 'Female']
+        p_element = p.loc[(slice(None),) + elem]    
+        n_element = np.array(x_element).sum()
+        loglikelihood += np.sum(multinomial.logpmf(x_element.tolist(), 
+                                                   n_element, 
+                                                   p_element.tolist()))
+    return loglikelihood
 
 # Hill-climbing algorithm
 def powerset(variables):
@@ -489,7 +500,7 @@ def hill_climbing_algorithm(target_variable):
         if (combo[0] == target_variable) & (len(combo)>1):
             for subset in combo:
                 data_likelihood += calc_independent_loglikelihood_var_disc(subset)
-            cond_likelihood = calc_cond_prob_disc(list(combo))
+            cond_likelihood = calc_cond_prob_loglikelihood_disc(list(combo))
             if cond_likelihood > data_likelihood:
                 edge = True
             output[combo] = [data_likelihood,cond_likelihood, edge]
