@@ -447,7 +447,7 @@ norm.cdf(1, loc=avg, scale=std)
 def calc_cond_prob_cont(y, y_event, x1, x1_event):
     # P(y ∩ x):
     y_and_x = len(train_df[(train_df[y] == y_event) & (train_df[x1] < x1_event)])
-    x = len(test[test[x1] < x1_event])
+    x = len(train_df[train_df[x1] < x1_event])
     p = y_and_x / x
     return p
 calc_cond_prob_cont('User_LSD', True, 'Nscore', 1)
