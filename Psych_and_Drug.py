@@ -21,6 +21,8 @@ from pomegranate import *
 from pomegranate.utils import plot_networkx
 import networkx
 from itertools import combinations, chain
+from sklearn.preprocessing import KBinsDiscretizer
+
 
 
 
@@ -271,11 +273,29 @@ def prediction_metrics(drug, y_pred, y_test):
           "\nSensitivity: ", round(sensitivity, 2),
           "\nSpecifity: ", round(specifity, 2))
 
+#----------------------------------3.1 Discretization--------------------------------
+
+
+discretizer = KBinsDiscretizer(n_bins=8, encode='ordinal', strategy='quantile')
+discretizer.fit(PsychDrug[['Nscore','Escore','Oscore','Ascore','Cscore', 'Impulsiv', 'SS']])
+var_discretized = discretizer.transform(PsychDrug[['Nscore','Escore','Oscore','Ascore','Cscore', 'Impulsiv', 'SS']])
+var_discretized = pd.DataFrame(var_discretized, 
+                               columns=['Nscore_d','Escore_d','Oscore_d','Ascore_d','Cscore_d', 'Impulsiv_d', 'SS_d'])
+
+# Example frequencies
+var_discretized.groupby('Nscore_d').size()
+
+# Join of discretized variables on PsychDrug
+PsychDrug = PsychDrug.join(var_discretized)
+
+# Plot to view distribution of Nscore
+sns.scatterplot(PsychDrug['Nscore_d'], PsychDrug['Nscore'])
 
 #----------------------------------3.1 Initialization, Split into Training & Test Data--------------------
 
 DemoVar = ['Education','Gender', 'Age']
-Big5Var = ['Nscore','Escore','Oscore','Ascore','Cscore'] #+ ['Impulsiv', 'SS']
+#Big5Var = ['Nscore','Escore','Oscore','Ascore','Cscore'] #+ ['Impulsiv', 'SS']
+Big5Var = ['Nscore_d','Escore_d','Oscore_d','Ascore_d','Cscore_d'] #+ ['Impulsiv_d', 'SS_d']
 DrugVar = ['User_LSD', 'User_Alcohol']
 
 # Split into train and test data
@@ -284,9 +304,7 @@ X_train, X_test, y_train, y_test = train_test_split(PsychDrug[DemoVar + Big5Var]
                                                     test_size=0.33, 
                                                     random_state=53)
 
-# Rounding the score variables, so we do not have continous variables anymore
-train_df = X_train.join(y_train).round()
-
+train_df = X_train.join(y_train)
 
 #%%
 #----------------------------------3.2 Learning the structure with pomegranate from scratch---------------
@@ -380,13 +398,13 @@ prediction_metrics('User_Alcohol', y_pred, y_test)
 
 # Prediction only from Big5 to 'User_LSD'
 
-Nscore = DiscreteDistribution((train_df.groupby(['Nscore']).size() / len(train_df)).to_dict())
-Escore = DiscreteDistribution((train_df.groupby(['Escore']).size() / len(train_df)).to_dict())
-Oscore = DiscreteDistribution((train_df.groupby(['Oscore']).size() / len(train_df)).to_dict())
-Ascore = DiscreteDistribution((train_df.groupby(['Ascore']).size() / len(train_df)).to_dict())
-Cscore = DiscreteDistribution((train_df.groupby(['Cscore']).size() / len(train_df)).to_dict())
+Nscore = DiscreteDistribution((train_df.groupby(['Nscore_d']).size() / len(train_df)).to_dict())
+Escore = DiscreteDistribution((train_df.groupby(['Escore_d']).size() / len(train_df)).to_dict())
+Oscore = DiscreteDistribution((train_df.groupby(['Oscore_d']).size() / len(train_df)).to_dict())
+Ascore = DiscreteDistribution((train_df.groupby(['Ascore_d']).size() / len(train_df)).to_dict())
+Cscore = DiscreteDistribution((train_df.groupby(['Cscore_d']).size() / len(train_df)).to_dict())
 
-CondProbTable_UserLSD = (train_df.groupby(['Nscore', 'Escore', 'Oscore', 'Ascore', 'Cscore', 'User_LSD']).size() / 
+CondProbTable_UserLSD = (train_df.groupby(['Nscore_d', 'Escore_d', 'Oscore_d', 'Ascore_d', 'Cscore_d', 'User_LSD']).size() / 
                              train_df.groupby('User_LSD').size())
 CondProbTable_UserLSD_list = CondProbTable_UserLSD.reset_index().values.tolist()
 
