@@ -22,7 +22,7 @@ from pomegranate.utils import plot_networkx
 import networkx
 from itertools import combinations, chain
 from sklearn.preprocessing import KBinsDiscretizer
-
+import math
 
 
 
@@ -275,7 +275,6 @@ def prediction_metrics(drug, y_pred, y_test):
 
 #----------------------------------3.1 Discretization--------------------------------
 
-
 discretizer = KBinsDiscretizer(n_bins=8, encode='ordinal', strategy='quantile')
 discretizer.fit(PsychDrug[['Nscore','Escore','Oscore','Ascore','Cscore', 'Impulsiv', 'SS']])
 var_discretized = discretizer.transform(PsychDrug[['Nscore','Escore','Oscore','Ascore','Cscore', 'Impulsiv', 'SS']])
@@ -476,13 +475,19 @@ calc_cond_prob_cont('User_LSD', True, 'Nscore', 1)
 
 #----------------------------------4.2.1. For discrete variables-------------------------
 
+train_df_large = train_df
+train_df_small = train_df[1:100]
+train_df = train_df_small
+
+# Hill-climbing algorithm
+
 def calc_independent_loglikelihood_var_disc(variable):
     x = train_df.groupby([variable]).size()
     n = len(train_df[variable])
     p = x / n
     return np.sum(multinomial.logpmf(x.tolist(),n,p.tolist()))
 
-def calc_cond_prob_loglikelihood_disc(list): 
+def calc_cond_prob_loglikelihood_disc(list):
     x = train_df.groupby(list).size()
     p = x / train_df.groupby(list[1:]).size()
     event_combo = x.index.droplevel(0).unique().tolist()
@@ -498,33 +503,61 @@ def calc_cond_prob_loglikelihood_disc(list):
         loglikelihood += np.sum(multinomial.logpmf(x_element.tolist(), 
                                                    n_element, 
                                                    p_element.tolist()))
+    loglikelihood -= (math.log(len(train_df),2)/2)*len(list)    
     return loglikelihood
 
-# Hill-climbing algorithm
 def powerset(variables):
     all_combinations = []
     for r in range(1,len(variables)+1):
         combinations_object = combinations(variables, r)
         combinations_list = list(combinations_object)
         all_combinations += combinations_list
-    return(all_combinations)
+    return(all_combinations)   
+
+def calculate_score(structure):
+    score = 0
+    for key, value in structure.items():
+        list_cond = []
+        if value == '':
+            score += calc_independent_loglikelihood_var_disc(key)
+        else:
+            list_cond.append(key)
+            for val in value:
+                list_cond.append(val)
+            score += calc_cond_prob_loglikelihood_disc(list_cond)
+    return score
+
+def generate_new_structure(structure, conditionals):
+    structure[conditionals[0]] = conditionals[1:]
+    for variable in conditionals[1:]:
+        structure.pop(variable, None)
+    return structure
 
 def hill_climbing_algorithm(target_variable):
-    output = {}
+    score = NEGINF
+    structure = {}
+    history = []
+    # Initializing structure with all independent nodes
     variable_list = [target_variable] + Big5Var + DemoVar
-    for combo in powerset(variable_list):
-        data_likelihood = 0
-        edge = False
-        if (combo[0] == target_variable) & (len(combo)>1):
-            for subset in combo:
-                data_likelihood += calc_independent_loglikelihood_var_disc(subset)
-            cond_likelihood = calc_cond_prob_loglikelihood_disc(list(combo))
-            if cond_likelihood > data_likelihood:
-                edge = True
-            output[combo] = [data_likelihood,cond_likelihood, edge]
-    return output                        
+    for variable in variable_list:
+        structure[variable] = ''
+    score = calculate_score(structure)
+    # go through every y in P(y|x1,x2...)
+    for target_variable_cond in variable_list:
+        initial_structure = structure
+        # go through every x in P(y|x1,x2)
+        for combo in powerset(variable_list):
+            if (combo[0] == target_variable_cond) & (len(combo)>1) & (len(combo)<4):
+                structure_new = generate_new_structure(initial_structure.copy(), combo)
+                score_new = calculate_score(structure_new)
+                history.append((structure_new, score_new))
+                if score_new > score:
+                    score = score_new
+                    structure = structure_new
+        #break
+    return structure, history                    
     
-result1 = hill_climbing_algorithm('User_LSD')
+result1, history = hill_climbing_algorithm('User_LSD')
 result2 = hill_climbing_algorithm('User_Alcohol')
 
 #----------------------------------4.2.2. For continuous variables-------------------------
