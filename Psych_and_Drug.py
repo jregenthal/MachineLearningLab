@@ -454,11 +454,8 @@ def calc_independent_var_cont(variable):
     avg = np.mean(train_df[variable])
     std = np.std(train_df[variable])
     return avg, std
-calc_independent_var_cont('Nscore')
-
-# Prob of an Nscore < 1
 avg, std = calc_independent_var_cont('Nscore')
-norm.cdf(1, loc=avg, scale=std)
+norm.logpdf(train_df['Nscore'], loc=avg, scale=std)
 
 # P(y|x) = P(y ∩ x) / P(x) --- Prob with x < 1
 def calc_cond_prob_cont(y, y_event, x1, x1_event):
