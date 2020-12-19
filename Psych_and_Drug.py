@@ -282,7 +282,7 @@ var_discretized = pd.DataFrame(var_discretized,
                                columns=['Nscore_d','Escore_d','Oscore_d','Ascore_d','Cscore_d', 'Impulsiv_d', 'SS_d'])
 
 # Example frequencies
-var_discretized.groupby('Nscore_d').size()
+var_discretized.groupby('Impulsiv_d').size()
 
 # Join of discretized variables on PsychDrug
 PsychDrug = PsychDrug.join(var_discretized)
@@ -306,49 +306,38 @@ X_train, X_test, y_train, y_test = train_test_split(PsychDrug[DemoVar + Big5Var]
 train_df = X_train.join(y_train)
 
 #%%
-#----------------------------------3.2 Learning the structure with pomegranate from scratch---------------
+#----------------------------------3.2 Bayesian Networks with pomegranate ---------------
 
-#----------------------------------3.2.1 Approach 1: From scratch with pomegranate---------------
+#----------------------------------3.2.1 Approach 1: Unconstraint learning from data with pomegranate---------------
 
 
 # Exact learning: Traditional shortest path algorithm
 model = BayesianNetwork.from_samples(train_df, algorithm='exact-dp')
-model.plot()
-model.log_probability(train_df.to_numpy()).sum() 
-y_pred = prediction_matrix(model, X_test, y_test)
-prediction_metrics('User_LSD', y_pred, y_test)
-prediction_metrics('User_Alcohol', y_pred, y_test)
-
 
 # Exact learning: A* algorithm
 model = BayesianNetwork.from_samples(train_df, algorithm='exact')
-model.plot()
-model.log_probability(train_df.to_numpy()).sum() 
-y_pred = prediction_matrix(model, X_test, y_test)
-prediction_metrics('User_LSD', y_pred, y_test)
-prediction_metrics('User_Alcohol', y_pred, y_test)
-
 
 # Approximate learning: Greedy algorithm
 model = BayesianNetwork.from_samples(train_df, algorithm='greedy')
-model.plot()
-model.log_probability(train_df.to_numpy()).sum() 
-y_pred = prediction_matrix(model, X_test, y_test)
-prediction_metrics('User_LSD', y_pred, y_test)
-prediction_metrics('User_Alcohol', y_pred, y_test)
-
 
 # Approximate learning: Chow-Liu tree algorithm
 model = BayesianNetwork.from_samples(train_df, algorithm='chow-liu')
+
 model.plot()
 model.log_probability(train_df.to_numpy()).sum() 
+
+# Prediction
 y_pred = prediction_matrix(model, X_test, y_test)
 prediction_metrics('User_LSD', y_pred, y_test)
 prediction_metrics('User_Alcohol', y_pred, y_test)
 
 
+# Dictionary for network nodes to read network structure
+for i, var in enumerate(DemoVar+Big5Var+DrugVar):
+    print(var, ': ', i)
+
 #%%
-#-----------------------------3.2.1 Approach 2: Constraint learning (with priors / conditional probabilities)---------------
+#-----------------------------3.2.2 Approach 2: Constrained learning from data with pomegranate--------------------
 
 
 # Create scaffold of network
@@ -356,8 +345,8 @@ demographics = tuple(range(0, len(DemoVar))) #['Education','Gender', 'Age']
 psycho_traits = tuple(range(max(demographics) + 1, max(demographics) + len(Big5Var) + 1)) #['Nscore','Escore','Oscore','Ascore','Cscore']
 drug_consumption = tuple(range(max(psycho_traits) + 1, max(psycho_traits) + len(DrugVar) + 1)) #['User_LSD', 'User_Alcohol']
 
+# Create network
 G = networkx.DiGraph()
-
 G.add_edge(demographics, psycho_traits)
 G.add_edge(psycho_traits, psycho_traits) #self-loop
 G.add_edge(psycho_traits, drug_consumption)
@@ -372,61 +361,10 @@ model = BayesianNetwork.from_samples(train_df.to_numpy(),
 model.plot()
 model.log_probability(train_df.to_numpy()).sum() 
 
-# Dictionary for network nodes to read network structure
-for i, var in enumerate(DemoVar+Big5Var+DrugVar):
-    #print(i, ': ', var)
-    print(var, ': ', i)
-
-model.structure
-
-
-# Prediction with loopy belief propogation (= approximate version of the forward-backward algorithm)
-
-# Example prediction
-model.predict_proba({})
-model.predict_proba([{'0':'University Degree', '1':'Female', '2':'25-34', '3':1.0, '4':1.0, '5':1.0, '6':1.0, '7':1.0}])
-
 # Prediction of the X_test data
 y_pred = prediction_matrix(model, X_test, y_test)
 prediction_metrics('User_LSD', y_pred, y_test)
 prediction_metrics('User_Alcohol', y_pred, y_test)
-
-
-#%%
-#-----------------------------Calculation of conditional probabilities---------------
-
-# Prediction only from Big5 to 'User_LSD'
-
-Nscore = DiscreteDistribution((train_df.groupby(['Nscore_d']).size() / len(train_df)).to_dict())
-Escore = DiscreteDistribution((train_df.groupby(['Escore_d']).size() / len(train_df)).to_dict())
-Oscore = DiscreteDistribution((train_df.groupby(['Oscore_d']).size() / len(train_df)).to_dict())
-Ascore = DiscreteDistribution((train_df.groupby(['Ascore_d']).size() / len(train_df)).to_dict())
-Cscore = DiscreteDistribution((train_df.groupby(['Cscore_d']).size() / len(train_df)).to_dict())
-
-CondProbTable_UserLSD = (train_df.groupby(['Nscore_d', 'Escore_d', 'Oscore_d', 'Ascore_d', 'Cscore_d', 'User_LSD']).size() / 
-                             train_df.groupby('User_LSD').size())
-CondProbTable_UserLSD_list = CondProbTable_UserLSD.reset_index().values.tolist()
-
-User_LSD = ConditionalProbabilityTable(CondProbTable_UserLSD_list, 
-                                       [Nscore, Escore, Oscore, Ascore, Cscore])
-
-s1 = Node(Nscore, name="Nscore")
-s2 = Node(Escore, name="Escore")
-s3 = Node(Oscore, name="Oscore")
-s4 = Node(Ascore, name="Ascore")
-s5 = Node(Cscore, name="Cscore")
-s6 = Node(User_LSD, name="User_LSD")
-
-model = BayesianNetwork("Big5")
-model.add_nodes(s1,s6)
-model.add_nodes(s1, s2, s3, s4, s5, s6)
-model.add_edge(s1, s6)
-model.add_edge(s2, s6)
-model.add_edge(s3, s6)
-model.add_edge(s4, s6)
-model.add_edge(s5, s6)
-model.bake()  # Fehlermeldung, da es fehlende Werte in der CondProbTable_UserLSD_list gibt
-model.plot()
 
 
 #%%
@@ -442,7 +380,7 @@ def calc_independent_var_disc(variable):
 calc_independent_var_disc('Education')
 
 def calc_cond_prob_disc(y, x1, x_label): # list = [y,x = 'Doctor'] (y has to come first)
-    p = train_df.groupby([y, x1]).size() / train_df.groupby(x1).size()  # p(y|x = 'doctor')
+    p = train_df.groupby([y, x1]).size() / train_df.groupby(x1).size()  
     return p.filter(like = x_label, axis=0)
 calc_cond_prob_disc('User_LSD', 'Education', 'Masters Degree')
 
@@ -500,7 +438,7 @@ def calc_cond_prob_loglikelihood_disc(list):
         loglikelihood += np.sum(multinomial.logpmf(x_element.tolist(), 
                                                    n_element, 
                                                    p_element.tolist()))
-    loglikelihood -= (math.log(len(train_df),2)/2)*len(list)    
+    loglikelihood -= (math.log(len(train_df),2)/2)*len(list) # penalty term
     return loglikelihood
 
 def powerset(variables):
@@ -545,6 +483,7 @@ def hill_climbing_algorithm(target_variable):
         # go through every x in P(y|x1,x2)
         for combo in powerset(variable_list):
             if (combo[0] == target_variable_cond) & (len(combo)>1) & (len(combo)<4):
+                print(combo)
                 structure_new = generate_new_structure(initial_structure.copy(), combo)
                 score_new = calculate_score(structure_new)
                 history.append((structure_new, score_new))
@@ -552,10 +491,10 @@ def hill_climbing_algorithm(target_variable):
                     score = score_new
                     structure = structure_new
         #break
-    return structure, history                    
+    return structure, history
     
 result1, history = hill_climbing_algorithm('User_LSD')
-result2 = hill_climbing_algorithm('User_Alcohol')
+
 
 #----------------------------------4.2.2. For continuous variables-------------------------
 
