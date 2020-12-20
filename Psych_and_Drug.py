@@ -447,7 +447,32 @@ def powerset(variables):
         combinations_object = combinations(variables, r)
         combinations_list = list(combinations_object)
         all_combinations += combinations_list
+        
     return(all_combinations)   
+
+def checking_constraints(child, parents):
+    min_num_parents = 0
+    max_num_parents = 3
+    fits_constraints = False
+    
+    # setting constraints
+    if (len(parents)>min_num_parents) & (len(parents)<max_num_parents):
+        # child = DemoVar
+        # DemoVar can't have parents of Big5Var or DrugVar
+        if (child in DemoVar):
+            if (len(set(parents).intersection(DrugVar)) == 0) & (len(set(parents).intersection(Big5Var)) == 0):
+                fits_constraints = True
+        # child = Big5Var
+        # Big5Var can't have parents of DrugVar
+        elif (child in Big5Var):
+            if len(set(parents).intersection(DrugVar)) == 0:
+                fits_constraints = True
+        # target_variabe = DrugVar
+        # no constraints
+        else:
+            fits_constraints = True
+
+    return fits_constraints
 
 def calculate_score(structure):
     score = 0
@@ -462,13 +487,17 @@ def calculate_score(structure):
             score += calc_cond_prob_loglikelihood_disc(list_cond)
     return score
 
-def generate_new_structure(structure, conditionals):
-    structure[conditionals[0]] = conditionals[1:]
-    for variable in conditionals[1:]:
-        structure.pop(variable, None)
+def generate_new_structure(structure, child, parents):
+    structure[child] = parents
+    for variable in parents:
+        for key, value in structure.items():
+            if (key == variable) & (value == ''):
+                structure.pop(variable, None)
+                break
     return structure
 
 def hill_climbing_algorithm(target_variable):
+    iteration = 0
     score = NEGINF
     structure = {}
     history = []
@@ -477,20 +506,30 @@ def hill_climbing_algorithm(target_variable):
     for variable in variable_list:
         structure[variable] = ''
     score = calculate_score(structure)
-    # go through every y in P(y|x1,x2...)
-    for target_variable_cond in variable_list:
+    # Creating list with child-nodes
+    list_children = variable_list.copy()
+    # Going through every y in P(y|x1,x2...)
+    while list_children != []:
+        list_parents = variable_list.copy()
         initial_structure = structure
-        # go through every x in P(y|x1,x2)
-        for combo in powerset(variable_list):
-            if (combo[0] == target_variable_cond) & (len(combo)>1) & (len(combo)<4):
-                print(combo)
-                structure_new = generate_new_structure(initial_structure.copy(), combo)
+        # Checking possible parents for target_variable, then random choice
+        if iteration == 0:
+            target = target_variable
+        else:
+            target = np.random.choice(list_children)
+        list_parents.remove(target)
+        list_children.remove(target)
+        # Going through every x in P(y|x1,x2)
+        for combo in powerset(list_parents):
+            if checking_constraints(target, combo) == True:
+                structure_new = generate_new_structure(initial_structure.copy(), target, combo)
                 score_new = calculate_score(structure_new)
-                history.append((structure_new, score_new))
+                history.append((str(target), combo))
                 if score_new > score:
                     score = score_new
                     structure = structure_new
-        #break
+                    history.append(((target, combo), structure,score))
+        iteration = iteration + 1
     return structure, history
     
 result1, history = hill_climbing_algorithm('User_LSD')
