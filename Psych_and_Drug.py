@@ -237,9 +237,9 @@ for boxplot in range(5):
 #%%
 #----------------------------------3. Bayesian Network with pomegranate--------------------
 
-def prediction_matrix(model, X_test, y_test):
+def prediction_pomegranate(model, X_test, y_test):
     # rename X_test columns to fit to model nodes
-    X_test_nodes = X_test.round() # Discretization
+    X_test_nodes = X_test.copy() 
     X_test_nodes.columns = [str(no) for no in np.arange(len(X_test_nodes.columns))]
     
     y_pred = []
@@ -304,6 +304,7 @@ X_train, X_test, y_train, y_test = train_test_split(PsychDrug[DemoVar + Big5Var]
                                                     random_state=53)
 
 train_df = X_train.join(y_train)
+test_df = X_test.join(y_test)
 
 #%%
 #----------------------------------3.2 Bayesian Networks with pomegranate ---------------
@@ -327,7 +328,7 @@ model.plot()
 model.log_probability(train_df.to_numpy()).sum() 
 
 # Prediction
-y_pred = prediction_matrix(model, X_test, y_test)
+y_pred = prediction_pomegranate(model, X_test, y_test)
 prediction_metrics('User_LSD', y_pred, y_test)
 prediction_metrics('User_Alcohol', y_pred, y_test)
 
@@ -335,7 +336,8 @@ prediction_metrics('User_Alcohol', y_pred, y_test)
 # Dictionary for network nodes to read network structure
 for i, var in enumerate(DemoVar+Big5Var+DrugVar):
     print(var, ': ', i)
-
+    
+    
 #%%
 #-----------------------------3.2.2 Approach 2: Constrained learning from data with pomegranate--------------------
 
@@ -358,13 +360,19 @@ plot_networkx(G)
 model = BayesianNetwork.from_samples(train_df.to_numpy(), 
                                      algorithm='exact', 
                                      constraint_graph=G)
+model.bake()
 model.plot()
 model.log_probability(train_df.to_numpy()).sum() 
 
 # Prediction of the X_test data
-y_pred = prediction_matrix(model, X_test, y_test)
+y_pred = prediction_pomegranate(model, X_test, y_test)
 prediction_metrics('User_LSD', y_pred, y_test)
 prediction_metrics('User_Alcohol', y_pred, y_test)
+
+
+test = X_test_nodes.iloc[0,].to_dict()
+testteprediction = model.predict_proba(test)
+
 
 
 #%%
@@ -374,16 +382,18 @@ prediction_metrics('User_Alcohol', y_pred, y_test)
 
 #----------------------------------4.2.1. For discrete variables-------------------------
 
-def calc_independent_var_disc(variable):
-    parameter = train_df.groupby([variable]).size() / len(train_df[variable])
+def calc_independent_var_disc(df, variable):
+    parameter = df.groupby([variable]).size() / len(df[variable])
     return parameter
-calc_independent_var_disc('Education')
+calc_independent_var_disc(test_df, 'Nscore_d')
 
-def calc_cond_prob_disc(y, x1, x_label): # list = [y,x = 'Doctor'] (y has to come first)
-    p = train_df.groupby([y, x1]).size() / train_df.groupby(x1).size()  
-    return p.filter(like = x_label, axis=0)
-calc_cond_prob_disc('User_LSD', 'Education', 'Masters Degree')
-
+def calc_cond_prob_disc(df, result, targetvariable):
+    variable_list = [targetvariable] + list(result1[targetvariable])
+    x = df.groupby(variable_list).size()
+    parameter = x / df.groupby(variable_list[1:]).size()
+    parameter = parameter.reorder_levels(order = variable_list)
+    return parameter
+calc_cond_prob_disc(test_df, result1, 'User_LSD')
 
 #----------------------------------4.2.2. For continuous variables-------------------------
 
@@ -438,7 +448,7 @@ def calc_cond_prob_loglikelihood_disc(list):
         loglikelihood += np.sum(multinomial.logpmf(x_element.tolist(), 
                                                    n_element, 
                                                    p_element.tolist()))
-    loglikelihood -= (math.log(len(train_df),2)/2)*len(list) # penalty term
+    #loglikelihood -= (math.log(len(train_df),2)/2)*len(list) # penalty term
     return loglikelihood
 
 def powerset(variables):
@@ -535,7 +545,7 @@ def hill_climbing_algorithm(target_variable):
 result1, history = hill_climbing_algorithm('User_LSD')
 
 
-#----------------------------------4.2.2. For continuous variables-------------------------
+#----------------------------------4.2.2. For continuous variables -------------------------
 
 def calc_independent_loglikelihood_var_cont(variable):
     avg = np.mean(PsychDrug[variable])
@@ -576,6 +586,27 @@ b = np.array(PsychDrug['Oscore'])
 test = np.row_stack((b,a))
 np.cov(test)
 
-#----------------------------------4.2.3. For mixed variables-------------------------
+#----------------------------------4.2.3. For mixed variables -------------------------
 
 # L(data|model) = L(P(y|x)|model) where y is discrete and x is continuous
+
+#----------------------------------4.3. Prediction -------------------------
+
+def prediction_scratch(test_df, algo_result, targetvariable):
+    y_pred = []
+    CPT = calc_cond_prob_disc(test_df, algo_result, targetvariable)  
+    for row_index, record in test_df.iterrows():
+        attributes = record[CPT.index.names[1:]]
+        record_pred = CPT.loc[(slice(None),) + tuple(attributes)]
+        try:
+            y_pred.append(record_pred[True])
+        except KeyError:
+            y_pred.append(record_pred[False])
+        
+    y_pred = pd.DataFrame(y_pred, columns=[targetvariable]).set_index(y_test.index)
+    return y_pred
+
+
+y_pred = prediction_scratch(test_df, result1, 'User_LSD')
+prediction_metrics('User_LSD', y_pred, y_test)
+    
