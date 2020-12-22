@@ -6,7 +6,7 @@ Authors: Johanna Regenthal and Sofija Engelson
 Due date: 
 '''
 
-#-----------------------0.Preliminaries-----------------------------------------
+# ---------- 0.Preliminaries -------------------------------------------------
 #%%
 import numpy as np
 import pandas as pd
@@ -22,22 +22,22 @@ from pomegranate.utils import plot_networkx
 import networkx
 from itertools import combinations, chain
 from sklearn.preprocessing import KBinsDiscretizer
-import math
+import math, copy
 
 
 
-#----------------------1.Reading and cleaning data-------------------------------
+# ---------- 1.Reading and cleaning data -------------------------------------
 
-#----------------------1.1 Reading--------------------------------------------------
+# ---------- 1.1 Reading -----------------------------------------------------
 
 colnames = ['ID','Age','Gender','Education','Country','Ethnicity','Nscore','Escore','Oscore','Ascore','Cscore','Impulsiv','SS','Alcohol','Amphet','Amyl','Benzos','Caff','Cannabis','Choc','Coke','Crack','Ecstasy','Heroin','Ketamine','Legalh','LSD','Meth','Mushrooms','Nicotine','Semer','VSA']
 
 PsychDrug = pd.read_csv('drug_consumption.data', names = colnames, header = None)
 PsychDrug.head()
 
-#----------------------1.2 Cleaning---------------------------------------------------
+# ---------- 1.2 Cleaning ----------------------------------------------------
 
-#----------1.2.1 Classification into Users and Non-users for all drugs------------------
+# ---------- 1.2.1 Classification into Users and Non-users for all drugs------
 # Imported from https://github.com/deepak525/Drug-Consumption/blob/master/drug.ipynb
 
 DrugUse = ['Alcohol','Amphet', 'Amyl', 'Benzos', 'Caff', 'Cannabis', 'Choc', 'Coke', 'Crack',
@@ -55,7 +55,7 @@ for i in range(len(DrugUse)):
 
 # PsychDrug.drop(columns = DrugUse)
 
-#------------------1.2.2 Dequantification of explanatory variables------------------------
+# ---------- 1.2.2 Dequantification of explanatory variables -----------------
 
 # Building dictionary which has the columns as key and the mapping of quantified number and 
 # translation saved as a tuple in value
@@ -114,7 +114,8 @@ PsychDrug['Education'] = mapping(PsychDrug,'Education')
 PsychDrug['Country'] = mapping(PsychDrug,'Country')
 PsychDrug['Ethnicity'] = mapping(PsychDrug,'Ethnicity')
 #%%
-#---------------------2. Exploratory analysis------------------------------------
+
+# ---------- 2. Exploratory analysis -----------------------------------------
 # Imported from https://github.com/deepak525/Drug-Consumption/blob/master/drug.ipynb
 
 # Visualization of frequency of usage for each drug
@@ -235,7 +236,7 @@ f.suptitle('Big Five for users and non-users of illegal drugs (decade-based)')
 for boxplot in range(5):
     axes[boxplot].yaxis.set_visible(False)
 #%%
-#----------------------------------3. Bayesian Network with pomegranate--------------------
+# ---------- 3. Bayesian Network with pomegranate ----------------------------
 
 def prediction_pomegranate(model, X_test, y_test):
     # rename X_test columns to fit to model nodes
@@ -273,7 +274,7 @@ def prediction_metrics(drug, y_pred, y_test):
           "\nSensitivity: ", round(sensitivity, 2),
           "\nSpecifity: ", round(specifity, 2))
 
-#----------------------------------3.1 Discretization--------------------------------
+# ---------- 3.1 Discretization ----------------------------------------------
 
 discretizer = KBinsDiscretizer(n_bins=8, encode='ordinal', strategy='quantile')
 discretizer.fit(PsychDrug[['Nscore','Escore','Oscore','Ascore','Cscore', 'Impulsiv', 'SS']])
@@ -290,7 +291,7 @@ PsychDrug = PsychDrug.join(var_discretized)
 # Plot to view distribution of Nscore
 sns.scatterplot(PsychDrug['Nscore_d'], PsychDrug['Nscore'])
 
-#----------------------------------3.1 Initialization, Split into Training & Test Data--------------------
+# ---------- 3.1 Initialization, Split into Training & Test Data -------------
 
 DemoVar = ['Education','Gender', 'Age']
 #Big5Var = ['Nscore','Escore','Oscore','Ascore','Cscore'] #+ ['Impulsiv', 'SS']
@@ -307,10 +308,9 @@ train_df = X_train.join(y_train)
 test_df = X_test.join(y_test)
 
 #%%
-#----------------------------------3.2 Bayesian Networks with pomegranate ---------------
+# ---------- 3.2 Bayesian Networks with pomegranate --------------------------
 
-#----------------------------------3.2.1 Approach 1: Unconstraint learning from data with pomegranate---------------
-
+# ---------- 3.2.1 Approach 1: Unconstraint learning from data with pomegranate---
 
 # Exact learning: Traditional shortest path algorithm
 model = BayesianNetwork.from_samples(train_df, algorithm='exact-dp')
@@ -339,7 +339,8 @@ for i, var in enumerate(DemoVar+Big5Var+DrugVar):
     
     
 #%%
-#-----------------------------3.2.2 Approach 2: Constrained learning from data with pomegranate--------------------
+# ---------- 3.2.2 Approach 2: Constrained learning from data with pomegranate---
+
 
 
 # Create scaffold of network
@@ -367,20 +368,14 @@ model.log_probability(train_df.to_numpy()).sum()
 # Prediction of the X_test data
 y_pred = prediction_pomegranate(model, X_test, y_test)
 prediction_metrics('User_LSD', y_pred, y_test)
-prediction_metrics('User_Alcohol', y_pred, y_test)
-
-
-test = X_test_nodes.iloc[0,].to_dict()
-testteprediction = model.predict_proba(test)
-
 
 
 #%%
-#----------------------------------4. Bayesian Network from scratch--------------------
+# ---------- 4. Bayesian Network from scratch --------------------------------
 
-#----------------------------------4.1 Bayesian Parameter Learning---------------------
+# ---------- 4.1 Bayesian Parameter Learning ---------------------------------
 
-#----------------------------------4.2.1. For discrete variables-------------------------
+# ---------- 4.1.1. For discrete variables -----------------------------------
 
 def calc_independent_var_disc(df, variable):
     parameter = df.groupby([variable]).size() / len(df[variable])
@@ -395,8 +390,10 @@ def calc_cond_prob_disc(df, result, targetvariable):
     return parameter
 calc_cond_prob_disc(test_df, result1, 'User_LSD')
 
-#----------------------------------4.2.2. For continuous variables-------------------------
+# ---------- 4.1.2. For continuous variables ---------------------------------
 
+
+# evtl Maximum Likelihood
 
 def calc_independent_var_cont(variable):
     avg = np.mean(train_df[variable])
@@ -416,13 +413,13 @@ calc_cond_prob_cont('User_LSD', True, 'Nscore', 1)
 
 
 #%%
-#----------------------------------4.2 Bayesian Structure Learning---------------------
+# ---------- 4.2 Bayesian Structure Learning ---------------------------------
 
-#----------------------------------4.2.1. For discrete variables-------------------------
+# ---------- 4.2.1. For discrete variables -----------------------------------
 
-train_df_large = train_df
-train_df_small = train_df[1:100]
-train_df = train_df_small
+#train_df_large = train_df
+#train_df_small = train_df[1:100]
+#train_df = train_df_small
 
 # Hill-climbing algorithm
 
@@ -545,7 +542,8 @@ def hill_climbing_algorithm(target_variable):
 result1, history = hill_climbing_algorithm('User_LSD')
 
 
-#----------------------------------4.2.2. For continuous variables -------------------------
+#%%
+# ---------- 4.2.2. For continuous variables ---------------------------------
 
 def calc_independent_loglikelihood_var_cont(variable):
     avg = np.mean(PsychDrug[variable])
@@ -586,15 +584,17 @@ b = np.array(PsychDrug['Oscore'])
 test = np.row_stack((b,a))
 np.cov(test)
 
-#----------------------------------4.2.3. For mixed variables -------------------------
+# ---------- 4.2.3. For mixed variables --------------------------------------
 
 # L(data|model) = L(P(y|x)|model) where y is discrete and x is continuous
 
-#----------------------------------4.3. Prediction -------------------------
+# ---------- 4.3. Probabilistic Inference ------------------------------------
 
-def prediction_scratch(test_df, algo_result, targetvariable):
+# ---------- 4.3.1. Simple prediction ----------------------------------------
+
+def prediction_scratch_simple(test_df, result, targetvariable):
     y_pred = []
-    CPT = calc_cond_prob_disc(test_df, algo_result, targetvariable)  
+    CPT = calc_cond_prob_disc(test_df, result, targetvariable)  
     for row_index, record in test_df.iterrows():
         attributes = record[CPT.index.names[1:]]
         record_pred = CPT.loc[(slice(None),) + tuple(attributes)]
@@ -607,6 +607,135 @@ def prediction_scratch(test_df, algo_result, targetvariable):
     return y_pred
 
 
-y_pred = prediction_scratch(test_df, result1, 'User_LSD')
+y_pred = prediction_scratch_simple(test_df, result1, 'User_LSD')
 prediction_metrics('User_LSD', y_pred, y_test)
+
+
+#%%
+# ---------- 4.3.2 Inference vis Enumerate Algorithm -------------------------
+
+# Variable Enumerate Algorithm
+# Based on:
+    # http://courses.csail.mit.edu/6.034s/handouts/spring12/bayesnets-pseudocode.pdf
+    # https://www.ke.tu-darmstadt.de/lehre/archiv/ws-14-15/ki/bayesian-networks2.pdf
+    # https://github.com/sonph/bayesnetinference/blob/master/BayesNet.py
+
+def topological_order(result, target_variable):
+    variables = list(result.keys())
+    all_parents = [list(result[key]) for key, val in result.items() if val != '']
+    for parents in all_parents:
+        for parent in parents:
+            variables.insert(0, parent)
+    return variables
+
+def ind_prob_table(df, variable):
+    parameter = df.groupby([variable]).size() / len(df[variable])
+    return parameter
+#Example: ind_prob_table(test_df, 'Nscore_d')
+
+def cond_prob_table(df, targetvariable, givenvariables):
+    variable_list = [targetvariable] + givenvariables
+    x = df.groupby(variable_list).size()
+    parameter = x / df.groupby(variable_list[1:]).size()
+    parameter = parameter.reorder_levels(order = variable_list)
+    return parameter
+#Example: cond_prob_table(test_df, 'User_LSD', ['Education', 'Gender'])
+
+def query_prob(result, Y, y, e):
+    """
+        Query P(Y | e), or the probability of the variable `Y`, given the
+        evidence set `e`, extended with the value of `Y`. All immediate parents
+        of Y have to be in `e`.
+    """
+    #result = result1
+    #Y = 'Ascore_d'
+    #y = 5.0
+    #e = X_test.iloc[0,][Big5Var + DemoVar]
+    
+    # Check if variable has parents:
+    if Y in result.keys():
+        if result[Y] != '':
+            parents = list(result[Y])
+            cpt = cond_prob_table(train_df, Y, parents)
+            cpt = cpt.reorder_levels(order = [Y] + parents)
+            try:
+                ret = cpt.loc[(y,) + tuple(e[parents])]
+            except KeyError:
+                ret = 0
+        else: 
+            cpt = ind_prob_table(test_df, Y)
+            ret = cpt.loc[(y,)]
+    # if no parents:
+    else: 
+        cpt = ind_prob_table(test_df, Y)
+        ret = cpt.loc[(y,)]
+    return ret
+    
+def enumerate_all(result, variables, e):
+    #result = result1
+    #variables = ['Education','Oscore_d','User_LSD']
+    #e = X_test.iloc[0,][Big5Var + DemoVar]
+    if len(variables) == 0:
+        return 1
+    Y = variables[0]
+    # If y is part of e, return the (cond.) probability
+    if Y in e.index:
+        y = e[Y]
+        ret = query_prob(result, Y, y, e) #* enumerate_all(result, variables[1:], e)
+    # If y is not part of e
+    else:
+        print(Y, ' not part of e')
+        probs = []
+        e_y = copy.deepcopy(e)
+        # Loop over all possible answers of y
+        for y in PsychDrug[Y].unique():
+            e_y[Y] = y
+            probs.append(query_prob(result, Y, y, e_y)) #* enumerate_all(result, variables[1:], e)
+        ret = sum(probs)
+    return ret
+
+def enumerate_ask(X, e, result):
+    #X = 'User_LSD' # Target Variable
+    #e = X_test.iloc[0,][Big5Var + DemoVar]
+    
+    # Initialization of distribution of target variable X
+    Q = pd.Series([])
+    # For each possible value x that X can have
+    for x in PsychDrug[X].unique():
+        # extend evidence e with value of X
+        e = copy.deepcopy(e)
+        e[X] = x
+        # sort variables in topological order
+        variables = topological_order(result, X) 
+        # Calculate enumeration
+        prob = 1
+        while len(variables) > 0:
+            prob = enumerate_all(result, variables, e) * prob
+            variables.pop(0)
+        Q[str(x)] = prob
+    # Normalization
+    Q = Q / sum(Q)
+    return Q
+        
+def prediction_scratch_enumerate(test_df, result, X):
+    y_pred = []
+    for row_index, record in test_df.iterrows():
+        e = copy.deepcopy(record)
+        Q = enumerate_ask(X, e, result)
+        record_pred = Q['True']
+        y_pred.append(record_pred)        
+    y_pred = pd.DataFrame(y_pred, columns=[X]).set_index(y_test.index)
+    return y_pred
+
+
+y_pred = prediction_scratch_enumerate(test_df, result1, 'User_LSD')
+prediction_metrics('User_LSD', y_pred, y_test)
+
+
+
+
+
+
+
+
     
