@@ -5,9 +5,9 @@ Project: Influence of psychological factors on drug consumption
 Authors: Johanna Regenthal and Sofija Engelson
 Due date: 
 '''
-
-# ---------- 0.Preliminaries -------------------------------------------------
 #%%
+# ---------- 0.Preliminaries -------------------------------------------------
+
 import numpy as np
 import pandas as pd
 from sklearn.preprocessing import LabelEncoder
@@ -274,7 +274,7 @@ def prediction_metrics(drug, y_pred, y_test):
           "\nSensitivity: ", round(sensitivity, 2),
           "\nSpecifity: ", round(specifity, 2))
 
-# ---------- 3.1 Discretization ----------------------------------------------
+# ---------- 3.1. Discretization ----------------------------------------------
 
 discretizer = KBinsDiscretizer(n_bins=8, encode='ordinal', strategy='quantile')
 discretizer.fit(PsychDrug[['Nscore','Escore','Oscore','Ascore','Cscore', 'Impulsiv', 'SS']])
@@ -291,11 +291,12 @@ PsychDrug = PsychDrug.join(var_discretized)
 # Plot to view distribution of Nscore
 sns.scatterplot(PsychDrug['Nscore_d'], PsychDrug['Nscore'])
 
-# ---------- 3.1 Initialization, Split into Training & Test Data -------------
+#%%
+# ---------- 3.2. Initialization, Split into Training & Test Data -------------
 
 DemoVar = ['Education','Gender', 'Age']
-#Big5Var = ['Nscore','Escore','Oscore','Ascore','Cscore'] #+ ['Impulsiv', 'SS']
-Big5Var = ['Nscore_d','Escore_d','Oscore_d','Ascore_d','Cscore_d'] #+ ['Impulsiv_d', 'SS_d']
+Big5Var = ['Nscore','Escore','Oscore','Ascore','Cscore'] #+ ['Impulsiv', 'SS']
+#Big5Var = ['Nscore_d','Escore_d','Oscore_d','Ascore_d','Cscore_d'] #+ ['Impulsiv_d', 'SS_d']
 DrugVar = ['User_LSD', 'User_Alcohol']
 
 # Split into train and test data
@@ -308,9 +309,9 @@ train_df = X_train.join(y_train)
 test_df = X_test.join(y_test)
 
 #%%
-# ---------- 3.2 Bayesian Networks with pomegranate --------------------------
+# ---------- 3.3. Bayesian Networks with pomegranate --------------------------
 
-# ---------- 3.2.1 Approach 1: Unconstraint learning from data with pomegranate---
+# ---------- 3.3.1 Approach 1: Unconstraint learning from data with pomegranate---
 
 # Exact learning: Traditional shortest path algorithm
 model = BayesianNetwork.from_samples(train_df, algorithm='exact-dp')
@@ -339,9 +340,7 @@ for i, var in enumerate(DemoVar+Big5Var+DrugVar):
     
     
 #%%
-# ---------- 3.2.2 Approach 2: Constrained learning from data with pomegranate---
-
-
+# ---------- 3.3.2 Approach 2: Constrained learning from data with pomegranate---
 
 # Create scaffold of network
 demographics = tuple(range(0, len(DemoVar))) #['Education','Gender', 'Age']
@@ -361,7 +360,7 @@ plot_networkx(G)
 model = BayesianNetwork.from_samples(train_df.to_numpy(), 
                                      algorithm='exact', 
                                      constraint_graph=G)
-model.bake()
+
 model.plot()
 model.log_probability(train_df.to_numpy()).sum() 
 
@@ -373,69 +372,31 @@ prediction_metrics('User_LSD', y_pred, y_test)
 #%%
 # ---------- 4. Bayesian Network from scratch --------------------------------
 
-# ---------- 4.1 Bayesian Parameter Learning ---------------------------------
-
-# ---------- 4.1.1. For discrete variables -----------------------------------
-
-def calc_independent_var_disc(df, variable):
-    parameter = df.groupby([variable]).size() / len(df[variable])
-    return parameter
-calc_independent_var_disc(test_df, 'Nscore_d')
-
-def calc_cond_prob_disc(df, result, targetvariable):
-    variable_list = [targetvariable] + list(result1[targetvariable])
-    x = df.groupby(variable_list).size()
-    parameter = x / df.groupby(variable_list[1:]).size()
-    parameter = parameter.reorder_levels(order = variable_list)
-    return parameter
-calc_cond_prob_disc(test_df, result1, 'User_LSD')
-
-# ---------- 4.1.2. For continuous variables ---------------------------------
-
-
-# evtl Maximum Likelihood
-
-def calc_independent_var_cont(variable):
-    avg = np.mean(train_df[variable])
-    std = np.std(train_df[variable])
-    return avg, std
-avg, std = calc_independent_var_cont('Nscore')
-norm.logpdf(train_df['Nscore'], loc=avg, scale=std)
-
-# P(y|x) = P(y ∩ x) / P(x) --- Prob with x < 1
-def calc_cond_prob_cont(y, y_event, x1, x1_event):
-    # P(y ∩ x):
-    y_and_x = len(train_df[(train_df[y] == y_event) & (train_df[x1] < x1_event)])
-    x = len(train_df[train_df[x1] < x1_event])
-    p = y_and_x / x
-    return p
-calc_cond_prob_cont('User_LSD', True, 'Nscore', 1)
-
-
-#%%
-# ---------- 4.2 Bayesian Structure Learning ---------------------------------
-
-# ---------- 4.2.1. For discrete variables -----------------------------------
-
-#train_df_large = train_df
-#train_df_small = train_df[1:100]
-#train_df = train_df_small
-
-# Hill-climbing algorithm
+# ---------- 4.1 Likelihood Calculation --------------------------------------
 
 def calc_independent_loglikelihood_var_disc(variable):
     x = train_df.groupby([variable]).size()
     n = len(train_df[variable])
     p = x / n
-    return np.sum(multinomial.logpmf(x.tolist(),n,p.tolist()))
+    loglike_array = multinomial.logpmf(x.tolist(), n, p.tolist())
+    loglikelihood = np.sum(loglike_array)
+    return loglikelihood
 
-def calc_cond_prob_loglikelihood_disc(list):
-    x = train_df.groupby(list).size()
-    p = x / train_df.groupby(list[1:]).size()
-    event_combo = x.index.droplevel(0).unique().tolist()
+def calc_independent_loglikelihood_var_cont(variable):
+    #avg = np.mean(train_df[variable])
+    #std = np.std(train_df[variable])
+    avg, std = norm.fit(train_df[variable])
+    loglikelihood = np.sum(norm.logpdf(train_df[variable], avg, std))
+    return loglikelihood
+#calc_independent_loglikelihood_var_cont('Nscore')
+
+def calc_cond_prob_loglikelihood_disc(variables):
     loglikelihood = 0
-    p = p.reorder_levels(order = list)
-    x = x.reorder_levels(order = list)
+    x = train_df.groupby(variables).size()
+    p = x / train_df.groupby(variables[1:]).size()
+    event_combo = x.index.droplevel(0).unique().tolist()
+    p = p.reorder_levels(order = variables)
+    x = x.reorder_levels(order = variables)
     for elem in event_combo: 
         #print(elem)
         elem = elem if isinstance(elem, tuple) else (elem,)
@@ -447,6 +408,127 @@ def calc_cond_prob_loglikelihood_disc(list):
                                                    p_element.tolist()))
     #loglikelihood -= (math.log(len(train_df),2)/2)*len(list) # penalty term
     return loglikelihood
+
+# Imported from https://github.com/darshanbagul/BayesianNetworks/blob/master/report_utils.py
+def calc_cond_prob_one_var_cont(y, x):
+#x = PsychDrug['Oscore']
+#y = PsychDrug['Nscore']
+    sq_temp = np.dot(x, np.vstack(x)) # temp^2 = x^T * x
+    l1 = [len(x) , np.sum(x)]
+    l2 = [np.sum(x), sq_temp[0]]
+    A = np.vstack([l1, l2])
+    y_mod = [np.sum(y), np.dot(x,y)]
+    A_inv = np.linalg.inv(A)
+    B  = np.dot(A_inv, y_mod)
+    var_temp = 0
+    for i in range(len(y)):
+        var_temp += np.square((B[0] + (B[1] * x[i])) - y[i])
+    var = var_temp/len(y)
+    sigma = np.sqrt(var)
+    log_likelihood = 0
+    for i in range(len(y)):
+        log_likelihood += norm.logpdf(y[i], B[0]+B[1]*x[i], sigma)
+    return log_likelihood
+#calc_cond_prob_one_var_cont(train_df["Nscore"], train_df["Oscore"])
+
+
+
+# Implementation of Conditional Gaussians
+    # Based on https://par.nsf.gov/servlets/purl/10048513
+def calc_cond_loglikelihood(variables):
+#variables = ['Nscore', 'Oscore']
+
+    y = variables[0]
+    parents = variables[1:]
+    parents_d = []
+    parents_c = []
+    loglikelihood = 0
+    
+    # Create parent sets partitioned by continuous and discrete variables
+    for parent in parents:
+        if parent in ['Nscore','Escore','Oscore','Ascore','Cscore', 'Impulsiv', 'SS']:
+            parents_c.append(parent)
+        else:
+            parents_d.append(parent)
+    
+    # Check if y is continuous and discrete variables
+    if y in ['Nscore','Escore','Oscore','Ascore','Cscore', 'Impulsiv', 'SS']:
+        y_continuous = True
+    else:
+        y_continuous = False
+            
+    # if all variables are discrete
+    if (len(parents_c) == 0) and (y_continuous == False):
+        X = train_df.groupby(variables).size()
+        N = len(train_df)
+        for n in X:
+            loglikelihood += n * np.log(n / N)
+
+    # if all variables are continuous
+    elif len(parents_d) == 0 and (y_continuous == True):
+        X = train_df[parents_c + [y]]
+        n, k = X.shape
+        # Parameter estimation with MLE for each parent_c
+        #mu_vec = []
+        sigma_vec = []
+        for var in X.columns:
+            mean, variance = norm.fit(X[var]) #MLE
+            #mu_vec.append(mean)
+            sigma_vec.append(variance)
+        sigma_array = np.array(sigma_vec)
+        # Calculate Likelihood with Formula
+        loglike_c = -(n / 2) * (np.log(abs(sigma_array)) + k * np.log(2 * math.pi) + 1)
+        loglikelihood = loglike_c.sum()
+
+    # else: mixed case    
+    else:
+        # Partitioning
+        if y_continuous:
+            X = train_df.set_index(parents_d)[parents_c + [y]]
+        else:
+            X = train_df.set_index(parents_d + [y])[parents_c]
+        pi_i = X.index.unique().tolist()
+        
+        # Iterate over partitions
+        loglike = 0
+        for p in pi_i:
+            # Create design matrix for partition p
+            X_p = X.loc[p]
+            n, k = X_p.shape
+            # Parameter estimation with MLE for each parent_c
+            #mu_vec = []
+            sigma_vec = []
+            for var in X_p.columns:
+                mean, variance = norm.fit(X_p[var]) #MLE
+                #mu_vec.append(mean)
+                sigma_vec.append(variance)
+            sigma_array = np.array(sigma_vec)
+            # Calculate Likelihood with Formula
+            loglike_c = -(n / 2) * (np.log(abs(sigma_array)) + k * np.log(2 * math.pi) + 1)
+            loglike_d = n * np.log(n / len(train_df))
+            loglike += loglike_c + loglike_d
+        # Calculate likelihood of parents
+        loglike_parents = 0
+        for parent in parents:
+            if parent in parents_c:
+                loglike_parents += calc_independent_loglikelihood_var_cont(parent)
+            else:
+                loglike_parents += calc_independent_loglikelihood_var_disc(parent)
+        loglikelihood = loglike.sum() - loglike_parents.sum()
+    
+    return loglikelihood
+
+
+#%%
+# ---------- 4.2 Bayesian Structure Learning ---------------------------------
+
+# ---------- 4.2.1 For discrete variables ------------------------------------
+
+#train_df_large = train_df
+#train_df_small = train_df[1:100]
+#train_df = train_df_small
+
+# Hill-climbing algorithm
 
 def powerset(variables):
     all_combinations = []
@@ -543,58 +625,26 @@ result1, history = hill_climbing_algorithm('User_LSD')
 
 
 #%%
-# ---------- 4.2.2. For continuous variables ---------------------------------
-
-def calc_independent_loglikelihood_var_cont(variable):
-    avg = np.mean(PsychDrug[variable])
-    std = np.std(PsychDrug[variable])
-    return np.sum(norm.logpdf(PsychDrug[variable], avg, std))
-
-likelihood = calc_independent_loglikelihood_var_cont('Oscore')
-
-# Imported from https://github.com/darshanbagul/BayesianNetworks/blob/master/report_utils.py
-def calc_cond_prob_one_var_cont(y, x):
-    #x = PsychDrug['Oscore']
-    #y = PsychDrug['Escore']
-    sq_temp = np.dot(x, np.vstack(x)) # temp^2 = x^T * x
-    l1 = [len(x) , np.sum(x)]
-    l2 = [np.sum(x), sq_temp[0]]
-    A = np.vstack([l1, l2])
-    y_mod = [np.sum(y), np.dot(x,y)]
-
-    A_inv = np.linalg.inv(A)
-    B  = np.dot(A_inv, y_mod)
-
-    var_temp = 0
-    for i in range(len(y)):
-        var_temp += np.square((B[0] + (B[1] * x[i])) - y[i])
-
-    var = var_temp/len(y)
-    sigma = np.sqrt(var)
-    log_likelihood = 0
-    for i in range(len(y)):
-        log_likelihood += norm.logpdf(y[i], B[0]+B[1]*x[i], sigma)
-    return log_likelihood
-
-likelihood = calc_cond_prob_one_var_cont(train_df["Escore"], train_df["Oscore"])
-
-# Testing
-a = np.array(PsychDrug['Escore'])
-b = np.array(PsychDrug['Oscore'])
-test = np.row_stack((b,a))
-np.cov(test)
-
-# ---------- 4.2.3. For mixed variables --------------------------------------
-
-# L(data|model) = L(P(y|x)|model) where y is discrete and x is continuous
-
 # ---------- 4.3. Probabilistic Inference ------------------------------------
 
-# ---------- 4.3.1. Simple prediction ----------------------------------------
+def ind_prob_table(df, variable):
+    parameter = df.groupby([variable]).size() / len(df[variable])
+    return parameter
+#Example: ind_prob_table(test_df, 'User_LSD')
+
+def cond_prob_table(df, targetvariable, givenvariables):
+    variable_list = [targetvariable] + givenvariables
+    x = df.groupby(variable_list).size()
+    parameter = x / df.groupby(variable_list[1:]).size()
+    parameter = parameter.reorder_levels(order = variable_list)
+    return parameter
+#Example: cond_prob_table(test_df, 'User_LSD', list(result1['User_LSD']))
+
+# ---------- 4.3.1 Simple prediction -----------------------------------------
 
 def prediction_scratch_simple(test_df, result, targetvariable):
     y_pred = []
-    CPT = calc_cond_prob_disc(test_df, result, targetvariable)  
+    CPT = cond_prob_table(test_df, 'User_LSD', list(result1['User_LSD']))
     for row_index, record in test_df.iterrows():
         attributes = record[CPT.index.names[1:]]
         record_pred = CPT.loc[(slice(None),) + tuple(attributes)]
@@ -612,13 +662,14 @@ prediction_metrics('User_LSD', y_pred, y_test)
 
 
 #%%
-# ---------- 4.3.2 Inference vis Enumerate Algorithm -------------------------
+# ---------- 4.3.2 Inference with Enumerate Algorithm ------------------------
 
 # Variable Enumerate Algorithm
 # Based on:
     # http://courses.csail.mit.edu/6.034s/handouts/spring12/bayesnets-pseudocode.pdf
     # https://www.ke.tu-darmstadt.de/lehre/archiv/ws-14-15/ki/bayesian-networks2.pdf
     # https://github.com/sonph/bayesnetinference/blob/master/BayesNet.py
+# pomegranate uses Loopy Belief Propagation
 
 def topological_order(result, target_variable):
     variables = list(result.keys())
@@ -628,29 +679,16 @@ def topological_order(result, target_variable):
             variables.insert(0, parent)
     return variables
 
-def ind_prob_table(df, variable):
-    parameter = df.groupby([variable]).size() / len(df[variable])
-    return parameter
-#Example: ind_prob_table(test_df, 'Nscore_d')
-
-def cond_prob_table(df, targetvariable, givenvariables):
-    variable_list = [targetvariable] + givenvariables
-    x = df.groupby(variable_list).size()
-    parameter = x / df.groupby(variable_list[1:]).size()
-    parameter = parameter.reorder_levels(order = variable_list)
-    return parameter
-#Example: cond_prob_table(test_df, 'User_LSD', ['Education', 'Gender'])
-
 def query_prob(result, Y, y, e):
     """
         Query P(Y | e), or the probability of the variable `Y`, given the
         evidence set `e`, extended with the value of `Y`. All immediate parents
         of Y have to be in `e`.
     """
-    #result = result1
-    #Y = 'Ascore_d'
-    #y = 5.0
-    #e = X_test.iloc[0,][Big5Var + DemoVar]
+#result = result1
+#Y = 'Ascore_d'
+#y = 5.0
+#e = X_test.iloc[0,][Big5Var + DemoVar]
     
     # Check if variable has parents:
     if Y in result.keys():
@@ -672,9 +710,9 @@ def query_prob(result, Y, y, e):
     return ret
     
 def enumerate_all(result, variables, e):
-    #result = result1
-    #variables = ['Education','Oscore_d','User_LSD']
-    #e = X_test.iloc[0,][Big5Var + DemoVar]
+#result = result1
+#variables = ['Education','Oscore_d','User_LSD']
+#e = X_test.iloc[0,][Big5Var + DemoVar]
     if len(variables) == 0:
         return 1
     Y = variables[0]
@@ -695,9 +733,8 @@ def enumerate_all(result, variables, e):
     return ret
 
 def enumerate_ask(X, e, result):
-    #X = 'User_LSD' # Target Variable
-    #e = X_test.iloc[0,][Big5Var + DemoVar]
-    
+#X = 'User_LSD' # Target Variable
+#e = X_test.iloc[0,][Big5Var + DemoVar]
     # Initialization of distribution of target variable X
     Q = pd.Series([])
     # For each possible value x that X can have
@@ -731,11 +768,3 @@ def prediction_scratch_enumerate(test_df, result, X):
 y_pred = prediction_scratch_enumerate(test_df, result1, 'User_LSD')
 prediction_metrics('User_LSD', y_pred, y_test)
 
-
-
-
-
-
-
-
-    
