@@ -406,7 +406,7 @@ def calc_cond_prob_loglikelihood_disc(variables):
         loglikelihood += np.sum(multinomial.logpmf(x_element.tolist(), 
                                                    n_element, 
                                                    p_element.tolist()))
-    #loglikelihood -= (math.log(len(train_df),2)/2)*len(list) # penalty term
+    loglikelihood -= (math.log(len(train_df),2)/2)*len(variables) # penalty term
     return loglikelihood
 
 # Imported from https://github.com/darshanbagul/BayesianNetworks/blob/master/report_utils.py
@@ -573,7 +573,7 @@ def calculate_score(structure):
             list_cond.append(key)
             for val in value:
                 list_cond.append(val)
-            score += calc_cond_prob_loglikelihood_disc(list_cond)
+            score += calc_cond_loglikelihood(list_cond)
     return score
 
 def generate_new_structure(structure, child, parents):
@@ -640,31 +640,11 @@ def cond_prob_table(df, targetvariable, givenvariables):
     return parameter
 #Example: cond_prob_table(test_df, 'User_LSD', list(result1['User_LSD']))
 
-# ---------- 4.3.1 Simple prediction -----------------------------------------
-
-def prediction_scratch_simple(test_df, result, targetvariable):
-    y_pred = []
-    CPT = cond_prob_table(test_df, 'User_LSD', list(result1['User_LSD']))
-    for row_index, record in test_df.iterrows():
-        attributes = record[CPT.index.names[1:]]
-        record_pred = CPT.loc[(slice(None),) + tuple(attributes)]
-        try:
-            y_pred.append(record_pred[True])
-        except KeyError:
-            y_pred.append(record_pred[False])
-        
-    y_pred = pd.DataFrame(y_pred, columns=[targetvariable]).set_index(y_test.index)
-    return y_pred
-
-
-y_pred = prediction_scratch_simple(test_df, result1, 'User_LSD')
-prediction_metrics('User_LSD', y_pred, y_test)
-
 
 #%%
-# ---------- 4.3.2 Inference with Enumerate Algorithm ------------------------
+# ---------- 4.3.1 Inference with Enumerate Algorithm ------------------------
 
-# Variable Enumerate Algorithm
+# Variable Enumeration Algorithm
 # Based on:
     # http://courses.csail.mit.edu/6.034s/handouts/spring12/bayesnets-pseudocode.pdf
     # https://www.ke.tu-darmstadt.de/lehre/archiv/ws-14-15/ki/bayesian-networks2.pdf
