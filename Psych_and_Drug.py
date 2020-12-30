@@ -406,7 +406,7 @@ def calc_cond_prob_loglikelihood_disc(variables):
         loglikelihood += np.sum(multinomial.logpmf(x_element.tolist(), 
                                                    n_element, 
                                                    p_element.tolist()))
-    loglikelihood -= (math.log(len(train_df),2)/2)*len(variables) # penalty term
+    #loglikelihood -= (math.log(len(train_df),2)/2)*len(variables) # penalty term
     return loglikelihood
 
 # Imported from https://github.com/darshanbagul/BayesianNetworks/blob/master/report_utils.py
@@ -461,8 +461,16 @@ def calc_cond_loglikelihood(variables):
     if (len(parents_c) == 0) and (y_continuous == False):
         X = train_df.groupby(variables).size()
         N = len(train_df)
-        for n in X:
-            loglikelihood += n * np.log(n / N)
+        
+        # with PMF & loglikelihood
+        P = X / N
+        loglike_array = multinomial.logpmf(X.tolist(), N, P.tolist())
+        #loglikelihood = np.sum(loglike_array)
+        loglikelihood = calc_cond_prob_loglikelihood_disc(variables)
+        
+        #Formula from Conditional Gaussian:
+        #for n in X:
+        #    loglikelihood += n * np.log(n / N)
 
     # if all variables are continuous
     elif len(parents_d) == 0 and (y_continuous == True):
@@ -656,7 +664,8 @@ def topological_order(result, target_variable):
     all_parents = [list(result[key]) for key, val in result.items() if val != '']
     for parents in all_parents:
         for parent in parents:
-            variables.insert(0, parent)
+            if parent not in variables:
+                variables.insert(0, parent)
     return variables
 
 def query_prob(result, Y, y, e):
@@ -666,14 +675,15 @@ def query_prob(result, Y, y, e):
         of Y have to be in `e`.
     """
 #result = result1
-#Y = 'Ascore_d'
-#y = 5.0
+#Y = 'User_LSD'
+#y = True
 #e = X_test.iloc[0,][Big5Var + DemoVar]
     
     # Check if variable has parents:
     if Y in result.keys():
         if result[Y] != '':
             parents = list(result[Y])
+            # TBD: if Y is continuous
             cpt = cond_prob_table(train_df, Y, parents)
             cpt = cpt.reorder_levels(order = [Y] + parents)
             try:
@@ -714,7 +724,7 @@ def enumerate_all(result, variables, e):
 
 def enumerate_ask(X, e, result):
 #X = 'User_LSD' # Target Variable
-#e = X_test.iloc[0,][Big5Var + DemoVar]
+#e = X_test.iloc[4,][Big5Var + DemoVar]
     # Initialization of distribution of target variable X
     Q = pd.Series([])
     # For each possible value x that X can have
