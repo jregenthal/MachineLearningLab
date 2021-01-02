@@ -23,7 +23,7 @@ import networkx
 from itertools import combinations, chain
 from sklearn.preprocessing import KBinsDiscretizer
 import math, copy
-
+import random
 
 
 # ---------- 1.Reading and cleaning data -------------------------------------
@@ -295,8 +295,8 @@ sns.scatterplot(PsychDrug['Nscore_d'], PsychDrug['Nscore'])
 # ---------- 3.2. Initialization, Split into Training & Test Data -------------
 
 DemoVar = ['Education','Gender', 'Age']
-Big5Var = ['Nscore','Escore','Oscore','Ascore','Cscore'] #+ ['Impulsiv', 'SS']
-#Big5Var = ['Nscore_d','Escore_d','Oscore_d','Ascore_d','Cscore_d'] #+ ['Impulsiv_d', 'SS_d']
+#Big5Var = ['Nscore','Escore','Oscore','Ascore','Cscore'] #+ ['Impulsiv', 'SS']
+Big5Var = ['Nscore_d','Escore_d','Oscore_d','Ascore_d','Cscore_d'] #+ ['Impulsiv_d', 'SS_d']
 DrugVar = ['User_LSD', 'User_Alcohol']
 
 # Split into train and test data
@@ -390,6 +390,15 @@ def calc_independent_loglikelihood_var_cont(variable):
     return loglikelihood
 #calc_independent_loglikelihood_var_cont('Nscore')
 
+# Very first try of this function --> Problem: cond. prob. is never smaller than independent one
+def calc_cond_prob_loglikelihood_disc_old(variables):
+    x = train_df.groupby(variables).size()
+    n = len(train_df[variables])
+    p = x / n
+    loglike_array = multinomial.logpmf(x.tolist(), n, p.tolist())
+    loglikelihood = np.sum(loglike_array)
+    return loglikelihood
+
 def calc_cond_prob_loglikelihood_disc(variables):
     loglikelihood = 0
     x = train_df.groupby(variables).size()
@@ -465,12 +474,7 @@ def calc_cond_loglikelihood(variables):
         # with PMF & loglikelihood
         P = X / N
         loglike_array = multinomial.logpmf(X.tolist(), N, P.tolist())
-        #loglikelihood = np.sum(loglike_array)
-        loglikelihood = calc_cond_prob_loglikelihood_disc(variables)
-        
-        #Formula from Conditional Gaussian:
-        #for n in X:
-        #    loglikelihood += n * np.log(n / N)
+        loglikelihood = np.sum(loglike_array)
 
     # if all variables are continuous
     elif len(parents_d) == 0 and (y_continuous == True):
@@ -515,17 +519,16 @@ def calc_cond_loglikelihood(variables):
             loglike_c = -(n / 2) * (np.log(abs(sigma_array)) + k * np.log(2 * math.pi) + 1)
             loglike_d = n * np.log(n / len(train_df))
             loglike += loglike_c + loglike_d
-        # Calculate likelihood of parents
-        loglike_parents = 0
-        for parent in parents:
-            if parent in parents_c:
-                loglike_parents += calc_independent_loglikelihood_var_cont(parent)
-            else:
-                loglike_parents += calc_independent_loglikelihood_var_disc(parent)
-        loglikelihood = loglike.sum() - loglike_parents.sum()
+    # Calculate likelihood of parents
+    loglike_parents = 0
+    for parent in parents:
+        if parent in parents_c:
+            loglike_parents += calc_independent_loglikelihood_var_cont(parent)
+        else:
+            loglike_parents += calc_independent_loglikelihood_var_disc(parent)
+    loglikelihood = loglikelihood.sum() - loglike_parents.sum()
     
     return loglikelihood
-
 
 #%%
 # ---------- 4.2 Bayesian Structure Learning ---------------------------------
@@ -581,7 +584,8 @@ def calculate_score(structure):
             list_cond.append(key)
             for val in value:
                 list_cond.append(val)
-            score += calc_cond_loglikelihood(list_cond)
+            #score += calc_cond_loglikelihood(list_cond)
+            score += calc_cond_prob_loglikelihood_disc(list_cond)
     return score
 
 def generate_new_structure(structure, child, parents):
@@ -592,6 +596,8 @@ def generate_new_structure(structure, child, parents):
                 structure.pop(variable, None)
                 break
     return structure
+
+
 
 def hill_climbing_algorithm(target_variable):
     iteration = 0
@@ -605,6 +611,7 @@ def hill_climbing_algorithm(target_variable):
     score = calculate_score(structure)
     # Creating list with child-nodes
     list_children = variable_list.copy()
+    random.seed(123)
     # Going through every y in P(y|x1,x2...)
     while list_children != []:
         list_parents = variable_list.copy()
@@ -621,15 +628,41 @@ def hill_climbing_algorithm(target_variable):
             if checking_constraints(target, combo) == True:
                 structure_new = generate_new_structure(initial_structure.copy(), target, combo)
                 score_new = calculate_score(structure_new)
-                history.append((str(target), combo))
+                history.append(('no update', (str(target), combo), score_new))
                 if score_new > score:
                     score = score_new
                     structure = structure_new
-                    history.append(((target, combo), structure,score))
+                    history.append(('update', (str(target), combo), structure, score))
         iteration = iteration + 1
     return structure, history
     
 result1, history = hill_climbing_algorithm('User_LSD')
+
+for line in history:
+    print(line)
+
+# TESTING
+# Plotting different Likelihoods
+variables = ['User_LSD', 'Oscore_d', 'Education']
+variables = 'User_LSD'
+variables = ['Oscore', 'Nscore', 'Escore']
+
+x = []
+y = []
+for i in range(100,1300,100):
+    train_df_small = train_df_large[1:i]
+    train_df = train_df_small
+    x.append(i)
+    logli = calc_cond_loglikelihood(variables)
+    #logli = calc_cond_prob_loglikelihood_disc(variables)
+    #logli = calc_independent_loglikelihood_var_disc(variables)
+    y.append(logli)
+    print('parents: ', len(variables)-1, 'datapoints: ', i , ' , ', logli)
+
+                                       
+plt.scatter(x,y)
+plt.title(str(variables))
+plt.show()
 
 
 #%%
