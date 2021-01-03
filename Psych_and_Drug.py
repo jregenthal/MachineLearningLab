@@ -25,7 +25,6 @@ from sklearn.preprocessing import KBinsDiscretizer
 import math, copy
 import random
 
-
 # ---------- 1.Reading and cleaning data -------------------------------------
 
 # ---------- 1.1 Reading -----------------------------------------------------
@@ -338,7 +337,6 @@ prediction_metrics('User_Alcohol', y_pred, y_test)
 for i, var in enumerate(DemoVar+Big5Var+DrugVar):
     print(var, ': ', i)
     
-    
 #%%
 # ---------- 3.3.2 Approach 2: Constrained learning from data with pomegranate---
 
@@ -368,7 +366,6 @@ model.log_probability(train_df.to_numpy()).sum()
 y_pred = prediction_pomegranate(model, X_test, y_test)
 prediction_metrics('User_LSD', y_pred, y_test)
 
-
 #%%
 # ---------- 4. Bayesian Network from scratch --------------------------------
 
@@ -387,16 +384,6 @@ def calc_independent_loglikelihood_var_cont(variable):
     #std = np.std(train_df[variable])
     avg, std = norm.fit(train_df[variable])
     loglikelihood = np.sum(norm.logpdf(train_df[variable], avg, std))
-    return loglikelihood
-#calc_independent_loglikelihood_var_cont('Nscore')
-
-# Very first try of this function --> Problem: cond. prob. is never smaller than independent one
-def calc_cond_prob_loglikelihood_disc_old(variables):
-    x = train_df.groupby(variables).size()
-    n = len(train_df[variables])
-    p = x / n
-    loglike_array = multinomial.logpmf(x.tolist(), n, p.tolist())
-    loglikelihood = np.sum(loglike_array)
     return loglikelihood
 
 def calc_cond_prob_loglikelihood_disc(variables):
@@ -417,30 +404,6 @@ def calc_cond_prob_loglikelihood_disc(variables):
                                                    p_element.tolist()))
     #loglikelihood -= (math.log(len(train_df),2)/2)*len(variables) # penalty term
     return loglikelihood
-
-# Imported from https://github.com/darshanbagul/BayesianNetworks/blob/master/report_utils.py
-def calc_cond_prob_one_var_cont(y, x):
-#x = PsychDrug['Oscore']
-#y = PsychDrug['Nscore']
-    sq_temp = np.dot(x, np.vstack(x)) # temp^2 = x^T * x
-    l1 = [len(x) , np.sum(x)]
-    l2 = [np.sum(x), sq_temp[0]]
-    A = np.vstack([l1, l2])
-    y_mod = [np.sum(y), np.dot(x,y)]
-    A_inv = np.linalg.inv(A)
-    B  = np.dot(A_inv, y_mod)
-    var_temp = 0
-    for i in range(len(y)):
-        var_temp += np.square((B[0] + (B[1] * x[i])) - y[i])
-    var = var_temp/len(y)
-    sigma = np.sqrt(var)
-    log_likelihood = 0
-    for i in range(len(y)):
-        log_likelihood += norm.logpdf(y[i], B[0]+B[1]*x[i], sigma)
-    return log_likelihood
-#calc_cond_prob_one_var_cont(train_df["Nscore"], train_df["Oscore"])
-
-
 
 # Implementation of Conditional Gaussians
     # Based on https://par.nsf.gov/servlets/purl/10048513
@@ -584,8 +547,8 @@ def calculate_score(structure):
             list_cond.append(key)
             for val in value:
                 list_cond.append(val)
-            #score += calc_cond_loglikelihood(list_cond)
-            score += calc_cond_prob_loglikelihood_disc(list_cond)
+            score += calc_cond_loglikelihood(list_cond)
+            #score += calc_cond_prob_loglikelihood_disc(list_cond)
     return score
 
 def generate_new_structure(structure, child, parents):
