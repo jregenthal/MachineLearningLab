@@ -271,7 +271,7 @@ def prediction_metrics(drug, y_pred, y_test):
     print("Confusion_matrix:\n", confusion_matrix,
           "\nAccuracy: ", metrics.accuracy_score(true_values, predicted_values).round(2),
           "\nSensitivity: ", round(sensitivity, 2),
-          "\nSpecifity: ", round(specifity, 2))
+          "\nSpecificity: ", round(specifity, 2))
 
 # ---------- 3.1. Discretization ----------------------------------------------
 
@@ -501,6 +501,7 @@ def calc_cond_loglikelihood(variables):
 #train_df_large = train_df
 #train_df_small = train_df[1:100]
 #train_df = train_df_small
+#train_df = train_df_large
 
 # Hill-climbing algorithm
 
@@ -560,8 +561,6 @@ def generate_new_structure(structure, child, parents):
                 break
     return structure
 
-
-
 def hill_climbing_algorithm(target_variable):
     iteration = 0
     score = NEGINF
@@ -591,11 +590,12 @@ def hill_climbing_algorithm(target_variable):
             if checking_constraints(target, combo) == True:
                 structure_new = generate_new_structure(initial_structure.copy(), target, combo)
                 score_new = calculate_score(structure_new)
-                history.append(('no update', (str(target), combo), score_new))
                 if score_new > score:
                     score = score_new
                     structure = structure_new
                     history.append(('update', (str(target), combo), structure, score))
+                else:
+                    history.append(('no update', (str(target), combo), score_new))
         iteration = iteration + 1
     return structure, history
     
@@ -752,5 +752,32 @@ def prediction_scratch_enumerate(test_df, result, X):
 
 
 y_pred = prediction_scratch_enumerate(test_df, result1, 'User_LSD')
+prediction_metrics('User_LSD', y_pred, y_test)
+
+#%%
+# ---------- Results with pomegranate structure -------------------------------
+
+# Create dictionary for Variables
+dictionary = {}
+for i, var in enumerate(DemoVar+Big5Var+DrugVar):
+    dictionary[i] = var
+
+# Create structure format 
+structure = {}
+for i, node in enumerate(model.structure):
+    child = dictionary[i]
+    if len(node) == 0:
+        parents = ''
+    else:
+        parents = ()
+        for j in node:
+            parents += (dictionary[j],)
+    structure[child] = parents
+
+structure.pop('Gender', None)
+structure.pop('Oscore_d', None)
+structure.pop('User_Alcohol', None)
+
+y_pred = prediction_scratch_enumerate(test_df, structure, 'User_LSD')
 prediction_metrics('User_LSD', y_pred, y_test)
 
