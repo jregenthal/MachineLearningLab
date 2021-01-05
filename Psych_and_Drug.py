@@ -15,7 +15,7 @@ from sklearn.model_selection import train_test_split
 from sklearn import metrics
 import matplotlib.pyplot as plt
 import seaborn as sns
-from scipy.stats import chi2_contingency, norm, multinomial
+from scipy.stats import chi2_contingency, norm, multinomial, stats
 from matplotlib import patches as mpatches
 from pomegranate import *
 from pomegranate.utils import plot_networkx
@@ -95,8 +95,6 @@ MappingDict['Ethnicity'] = (-0.50212,'Asian'),\
     (0.11440,'Other'),\
     (-0.31685,'White')
     
-# MappingDict is missing for the following columns: Nscore','Escore','Oscore','Ascore','Cscore'
-
 # Rounding all floats to 5 places after comma for further replacement
 PsychDrug = round(PsychDrug,5)
 
@@ -112,6 +110,11 @@ PsychDrug['Gender'] = mapping(PsychDrug,'Gender')
 PsychDrug['Education'] = mapping(PsychDrug,'Education')
 PsychDrug['Country'] = mapping(PsychDrug,'Country')
 PsychDrug['Ethnicity'] = mapping(PsychDrug,'Ethnicity')
+
+DemoVar = ['Education','Gender', 'Age']
+Big5Var = ['Nscore','Escore','Oscore','Ascore','Cscore'] #+ ['Impulsiv', 'SS']
+DrugVar = ['User_LSD', 'User_Alcohol']
+
 #%%
 
 # ---------- 2. Exploratory analysis -----------------------------------------
@@ -148,52 +151,57 @@ plt.title("Drug Vs User Or Non-user",fontsize=15)
 plt.legend()
 plt.show()
 
-#----------------------------------------------------------------------------
-# Visualization of the correlations and covariances between all continuous variables
-# grouped by drug use frequencies and psychological variables
+# ---------- 2.1 Correletions ------------------------------------------------
 
-PsychVar = ['Nscore','Escore','Oscore','Ascore','Cscore','Impulsiv','SS']
+# Cramer's V for correlation between two categorical variables (demographic variable --> usage classification)
+# Imported from: https://stackoverflow.com/questions/20892799/using-pandas-calculate-cram%C3%A9rs-coefficient-matrix
 
-corMatDrugUse = PsychDrug[DrugUse].corr()
-corMatPsychVar = PsychDrug[PsychVar].corr()
+def cramers_corrected_stat(v1,v2):
+    """ calculate Cramers V statistic for categorial-categorial association.
+        uses correction from Bergsma and Wicher, 
+        Journal of the Korean Statistical Society 42 (2013): 323-328
+    """
+    confusion_matrix = pd.crosstab(PsychDrug[v1], PsychDrug[v2], margins = False)
+    chi2 = chi2_contingency(confusion_matrix)[0]
+    n = confusion_matrix.sum().sum()
+    phi2 = chi2/n
+    r,k = confusion_matrix.shape
+    phi2corr = max(0, phi2 - ((k-1)*(r-1))/(n-1))    
+    rcorr = r - ((r-1)**2)/(n-1)
+    kcorr = k - ((k-1)**2)/(n-1)
+    return np.sqrt(phi2corr / min( (kcorr-1), (rcorr-1)))
 
-covMatDrugUse = PsychDrug[DrugUse].cov()
-covMatPsychVar = PsychDrug[PsychVar].cov()
+def calculate_CramersV():
+    CramersV_df = pd.DataFrame(DemoVar, columns = ['Variable'])
+    for drug in DrugVar:
+        CramersV = []
+        for variable in DemoVar:
+            CramersV.append(cramers_corrected_stat(drug, variable))
+        CramersV_df[drug] = CramersV
+    return(CramersV_df)
 
-ax = plt.axes()
-sns.heatmap(corMatDrugUse, ax = ax)
-ax.set_title('Correlation heatmap for drug use frequencies')
-plt.show()
+print(calculate_CramersV())
 
-ax = plt.axes()
-sns.heatmap(corMatPsychVar, ax = ax)
-ax.set_title('Correlation heatmap for psychological factors')
-plt.show()
+# Biserial correlation between a binary and a numerical variable (Big5Var --> DrugVar)
+# For example: Oscore and usage of LSD
 
-ax = plt.axes()
-sns.heatmap(covMatDrugUse, ax = ax)
-ax.set_title('Covariance heatmap for drug use frequencies')
-plt.show()
+def calculate_biserial_correlation():
+    BisCor_df = pd.DataFrame(Big5Var, columns = ['Variable'])
+    for drug in DrugVar:
+        Cor_list = []
+        for variable in Big5Var:
+            Cor = stats.pointbiserialr(PsychDrug[drug], PsychDrug[variable])[0] 
+            pvalue = stats.pointbiserialr(PsychDrug[drug], PsychDrug[variable])[1]
+            if pvalue < 0.05:
+                Cor_list.append(Cor)
+            else:
+                Cor_list.append(0)
+        BisCor_df[drug] = Cor_list
+    return BisCor_df
 
-ax = plt.axes()
-sns.heatmap(covMatPsychVar, ax = ax)
-ax.set_title('Covariance heatmap for psychological factors')
-plt.show()
-
-# Chi-Square test for correlation between two categorial variables (demographic variable --> usage classification)
-# For example: Education and usage of nicotine
-
-def perform_chi_test(v1, v2):
-    table = pd.crosstab(PsychDrug[v1], PsychDrug[v2], margins = False)
-    stat, p, dof, expected = chi2_contingency(table)
-    alpha = 0.05
-    #print('significance=%.3f, p=%.3f' % (alpha, p))
-    if p <= alpha:
-        print(v1 + ' and ' + v2 + ' are dependent because H0 can be rejected with a p-value of p=%.3f.' % p)
-    else:
-        print(v1 + ' and ' + v2 + ' are independent because H0 can not be rejected with a p-value of p=%.3f.' % p)
-
-perform_chi_test('Education', 'User_Nicotine')
+print(calculate_biserial_correlation())
+    
+# ---------- 2.2 Visualization of users and non-users -------------------------
 
 # Definition of a cumulative variable which indicates users (dacade-based) of legal and illegal drugs
 LegalDrugs = ['User_Alcohol', 'User_Caff', 'User_Choc', 'User_Coke', 'User_Nicotine']
@@ -234,6 +242,7 @@ f.suptitle('Big Five for users and non-users of illegal drugs (decade-based)')
 
 for boxplot in range(5):
     axes[boxplot].yaxis.set_visible(False)
+    
 #%%
 # ---------- 3. Bayesian Network with pomegranate ----------------------------
 
@@ -291,12 +300,9 @@ PsychDrug = PsychDrug.join(var_discretized)
 sns.scatterplot(PsychDrug['Nscore_d'], PsychDrug['Nscore'])
 
 #%%
-# ---------- 3.2. Initialization, Split into Training & Test Data -------------
+# ---------- 3.2. Split into Training & Test Data ----------------------------
 
-DemoVar = ['Education','Gender', 'Age']
-#Big5Var = ['Nscore','Escore','Oscore','Ascore','Cscore'] #+ ['Impulsiv', 'SS']
 Big5Var = ['Nscore_d','Escore_d','Oscore_d','Ascore_d','Cscore_d'] #+ ['Impulsiv_d', 'SS_d']
-DrugVar = ['User_LSD', 'User_Alcohol']
 
 # Split into train and test data
 X_train, X_test, y_train, y_test = train_test_split(PsychDrug[DemoVar + Big5Var], 
@@ -308,7 +314,7 @@ train_df = X_train.join(y_train)
 test_df = X_test.join(y_test)
 
 #%%
-# ---------- 3.3. Bayesian Networks with pomegranate --------------------------
+# ---------- 3.3. Training a Bayesian Networks with pomegranate ---------------
 
 # ---------- 3.3.1 Approach 1: Unconstraint learning from data with pomegranate---
 
