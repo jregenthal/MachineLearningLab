@@ -302,7 +302,8 @@ sns.scatterplot(PsychDrug['Nscore_d'], PsychDrug['Nscore'])
 #%%
 # ---------- 3.2. Split into Training & Test Data ----------------------------
 
-Big5Var = ['Nscore_d','Escore_d','Oscore_d','Ascore_d','Cscore_d'] #+ ['Impulsiv_d', 'SS_d']
+#Big5Var = ['Nscore_d','Escore_d','Oscore_d','Ascore_d','Cscore_d'] #+ ['Impulsiv_d', 'SS_d']
+Big5Var = ['Nscore','Escore','Oscore','Ascore','Cscore'] #+ ['Impulsiv', 'SS']
 
 # Split into train and test data
 X_train, X_test, y_train, y_test = train_test_split(PsychDrug[DemoVar + Big5Var], 
@@ -471,7 +472,6 @@ def calc_cond_loglikelihood(variables):
         pi_i = X.index.unique().tolist()
         
         # Iterate over partitions
-        loglike = 0
         for p in pi_i:
             # Create design matrix for partition p
             X_p = X.loc[p]
@@ -487,7 +487,7 @@ def calc_cond_loglikelihood(variables):
             # Calculate Likelihood with Formula
             loglike_c = -(n / 2) * (np.log(abs(sigma_array)) + k * np.log(2 * math.pi) + 1)
             loglike_d = n * np.log(n / len(train_df))
-            loglike += loglike_c + loglike_d
+            loglikelihood += loglike_c + loglike_d
     # Calculate likelihood of parents
     loglike_parents = 0
     for parent in parents:
@@ -637,18 +637,32 @@ plt.show()
 #%%
 # ---------- 4.3. Probabilistic Inference ------------------------------------
 
-def ind_prob_table(df, variable):
+def ind_prob_table_discrete(df, variable):
     parameter = df.groupby([variable]).size() / len(df[variable])
     return parameter
-#Example: ind_prob_table(test_df, 'User_LSD')
+#Example: ind_prob_table_discrete(test_df, 'User_LSD')
 
-def cond_prob_table(df, targetvariable, givenvariables):
-    variable_list = [targetvariable] + givenvariables
+def cond_prob_table_discrete(df, targetvariable, parents):
+    variable_list = [targetvariable] + parents
     x = df.groupby(variable_list).size()
     parameter = x / df.groupby(variable_list[1:]).size()
     parameter = parameter.reorder_levels(order = variable_list)
     return parameter
-#Example: cond_prob_table(test_df, 'User_LSD', list(result1['User_LSD']))
+#Example: cond_prob_table_discrete(test_df, 'User_LSD', list(result1['User_LSD']))
+
+def ind_prob_parameter_continuous(df, targetvariable):
+    avg, std = norm.fit(df[targetvariable])
+    #prob = norm.pdf(x, avg, std)
+    return avg, std
+#Example: ind_prob_parameter_continuous(df, 'Nscore')
+
+# https://stats.libretexts.org/Bookshelves/Probability_Theory/Book%3A_Introductory_Probability_(Grinstead_and_Snell)/04%3A_Conditional_Probability/4.02%3A_Continuous_Conditional_Probability
+# targetvariable is continuous
+def cond_prob_parameter_continuous(df, targetvariable, parents, e):
+    X = df.set_index(parents)[targetvariable]
+    filtering = tuple(e[parents])
+    avg, std = norm.fit(X[filtering])
+    return avg, std
 
 
 #%%
@@ -659,7 +673,6 @@ def cond_prob_table(df, targetvariable, givenvariables):
     # http://courses.csail.mit.edu/6.034s/handouts/spring12/bayesnets-pseudocode.pdf
     # https://www.ke.tu-darmstadt.de/lehre/archiv/ws-14-15/ki/bayesian-networks2.pdf
     # https://github.com/sonph/bayesnetinference/blob/master/BayesNet.py
-# pomegranate uses Loopy Belief Propagation
 
 def topological_order(result, target_variable):
     variables = list(result.keys())
@@ -681,24 +694,40 @@ def query_prob(result, Y, y, e):
 #y = True
 #e = X_test.iloc[0,][Big5Var + DemoVar]
     
-    # Check if variable has parents:
-    if Y in result.keys():
-        if result[Y] != '':
-            parents = list(result[Y])
-            # TBD: if Y is continuous
-            cpt = cond_prob_table(train_df, Y, parents)
-            cpt = cpt.reorder_levels(order = [Y] + parents)
-            try:
-                ret = cpt.loc[(y,) + tuple(e[parents])]
-            except KeyError:
-                ret = 0
+    # if Y is continuous (with discrete parents)
+    if Y in ['Nscore','Escore','Oscore','Ascore','Cscore', 'Impulsiv', 'SS']:
+        # heck if variable has parents
+        if Y in result.keys():
+            if result[Y] != '':
+                parents = list(result[Y])
+                avg, std = cond_prob_parameter_continuous(train_df, Y, parents, e)
+                ret = norm.pdf(y, avg, std)
+            else: 
+                avg, std = ind_prob_parameter_continuous(train_df, Y)
+                ret = norm.pdf(y, avg, std)
         else: 
-            cpt = ind_prob_table(test_df, Y)
-            ret = cpt.loc[(y,)]
-    # if no parents:
+            avg, std = ind_prob_parameter_continuous(train_df, Y)
+            ret = norm.pdf(y, avg, std)
+    
+            
+    # if Y is discrete (with discrete paretns)
     else: 
-        cpt = ind_prob_table(test_df, Y)
-        ret = cpt.loc[(y,)]
+        # Check if variable has parents
+        if Y in result.keys():
+            if result[Y] != '':
+                parents = list(result[Y])
+                cpt = cond_prob_table_discrete(train_df, Y, parents)
+                cpt = cpt.reorder_levels(order = [Y] + parents)
+                try:
+                    ret = cpt.loc[(y,) + tuple(e[parents])]
+                except KeyError:
+                    ret = 0
+            else: 
+                cpt = ind_prob_table_discrete(test_df, Y)
+                ret = cpt.loc[(y,)]
+        else: 
+            cpt = ind_prob_table_discrete(test_df, Y)
+            ret = cpt.loc[(y,)]
     return ret
     
 def enumerate_all(result, variables, e):
@@ -726,7 +755,7 @@ def enumerate_all(result, variables, e):
 
 def enumerate_ask(X, e, result):
 #X = 'User_LSD' # Target Variable
-#e = X_test.iloc[4,][Big5Var + DemoVar]
+#e = X_test.iloc[-2,][Big5Var + DemoVar]
     # Initialization of distribution of target variable X
     Q = pd.Series([])
     # For each possible value x that X can have
