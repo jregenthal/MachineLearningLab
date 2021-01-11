@@ -122,7 +122,7 @@ DrugVar = ['User_LSD', 'User_Alcohol']
 
 # Visualization of frequency of usage for each drug
 fig, axes = plt.subplots(5,3,figsize = (16,16))
-fig.suptitle("Count of Different Classes Vs Drug",fontsize=14)
+fig.suptitle("Drug use frequencies per drug",fontsize=18)
 k=0
 for i in range(5):
     for j in range(3):
@@ -147,7 +147,7 @@ plt.bar(bins+0,count_of_users,width=0.4,label ='User')
 plt.bar(bins+.30,count_of_non_users,width=0.4,label ='Non-User')
 plt.xticks(bins,DrugUse,rotation=50,fontsize=13)
 plt.ylabel("Count",fontsize=13)
-plt.title("Drug Vs User Or Non-user",fontsize=15)
+plt.title("Drug users vs. non-users (decade-based)",fontsize=15)
 plt.legend()
 plt.show()
 
@@ -203,46 +203,38 @@ print(calculate_biserial_correlation())
     
 # ---------- 2.2 Visualization of users and non-users -------------------------
 
-# Definition of a cumulative variable which indicates users (dacade-based) of legal and illegal drugs
-LegalDrugs = ['User_Alcohol', 'User_Caff', 'User_Choc', 'User_Coke', 'User_Nicotine']
-IllegalDrugs = ['User_Amphet', 'User_Amyl', 'User_Benzos','User_Cannabis', 'User_Crack',\
-                'User_Ecstasy', 'User_Heroin', 'User_Ketamine', 'User_Legalh', 'User_LSD',\
-                'User_Meth', 'User_Mushrooms','User_Semer', 'User_VSA']
-
-def make_cumvar (list):
-    User_cum = ['Non-user'] * len(PsychDrug)
-#    User_cum = [False] * len(PsychDrug)
-    for i in range(len(PsychDrug)):
-        for drug in list:
-            if PsychDrug[drug][i]==True:
-                User_cum[i] = 'User'
-#                User_cum[i] = True
-    return User_cum
-
-PsychDrug['User_LegalDrugs'] = make_cumvar(LegalDrugs)
-PsychDrug['User_IllegalDrugs'] = make_cumvar(IllegalDrugs)
-
 # Visualization of a continous variable for certain groups
-# For example: Big Five scores for users and non-users of illegal drugs in comparison
+# For example: Big Five scores for users and non-users for a drug
 
-NonUser = mpatches.Patch(color='blue')
-User = mpatches.Patch(color='red')
-mypal = {'Non-user': 'b', 'User': 'r'}
-
-f, axes = plt.subplots(5, 1, sharex=True, sharey=True)
-f.subplots_adjust(hspace=.75)
-
-sns.boxplot(x = 'Nscore', y = 'User_IllegalDrugs', data = PsychDrug, ax = axes[0], palette = mypal)
-sns.boxplot(x = 'Escore', y = 'User_IllegalDrugs', data = PsychDrug, ax = axes[1], palette = mypal)
-sns.boxplot(x = 'Oscore', y = 'User_IllegalDrugs', data = PsychDrug, ax = axes[2], palette = mypal)
-sns.boxplot(x = 'Ascore', y = 'User_IllegalDrugs', data = PsychDrug, ax = axes[3], palette = mypal)
-sns.boxplot(x = 'Cscore', y = 'User_IllegalDrugs', data = PsychDrug, ax = axes[4], palette = mypal)
-f.legend(handles = [NonUser,User], labels = ['Non-user','User'], loc = 'lower right')
-f.suptitle('Big Five for users and non-users of illegal drugs (decade-based)')
-
-for boxplot in range(5):
-    axes[boxplot].yaxis.set_visible(False)
+def boxplot_scores_per_drug(target_variable):
     
+    User_drug = ['Non-user'] * len(PsychDrug)
+
+    for i in range(len(PsychDrug)):
+        if PsychDrug[target_variable][i]==True:
+            User_drug[i] = 'User'
+
+    data = PsychDrug[Big5Var]
+    data = data.assign(Drug = User_drug)
+
+    NonUser = mpatches.Patch(color='blue')
+    User = mpatches.Patch(color='red')
+    mypal = {'Non-user': 'b', 'User': 'r'}
+
+    f, axes = plt.subplots(5, 1, sharex=True, sharey=True)
+    f.subplots_adjust(hspace=.75)
+
+    sns.boxplot(x = 'Nscore', y = 'Drug', data = data, ax = axes[0], palette = mypal)
+    sns.boxplot(x = 'Escore', y = 'Drug', data = data, ax = axes[1], palette = mypal)
+    sns.boxplot(x = 'Oscore', y = 'Drug', data = data, ax = axes[2], palette = mypal)
+    sns.boxplot(x = 'Ascore', y = 'Drug', data = data, ax = axes[3], palette = mypal)
+    sns.boxplot(x = 'Cscore', y = 'Drug', data = data, ax = axes[4], palette = mypal)
+    f.legend(handles = [NonUser,User], labels = ['Non-user','User'], loc = 'lower right')
+    f.suptitle('Big Five for users and non-users of ' + str(target_variable[5:]) + ' (decade-based)')
+    
+    for boxplot in range(5):
+        axes[boxplot].yaxis.set_visible(False)
+
 #%%
 # ---------- 3. Bayesian Network with pomegranate ----------------------------
 
