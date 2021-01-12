@@ -113,7 +113,7 @@ PsychDrug['Ethnicity'] = mapping(PsychDrug,'Ethnicity')
 
 DemoVar = ['Education','Gender', 'Age']
 Big5Var = ['Nscore','Escore','Oscore','Ascore','Cscore'] #+ ['Impulsiv', 'SS']
-DrugVar = ['User_LSD', 'User_Alcohol']
+DrugVar = ['User_LSD']
 
 #%%
 
@@ -329,8 +329,6 @@ model.log_probability(train_df.to_numpy()).sum()
 # Prediction
 y_pred = prediction_pomegranate(model, X_test, y_test)
 prediction_metrics('User_LSD', y_pred, y_test)
-prediction_metrics('User_Alcohol', y_pred, y_test)
-
 
 # Dictionary for network nodes to read network structure
 for i, var in enumerate(DemoVar+Big5Var+DrugVar):
@@ -407,8 +405,6 @@ def calc_cond_prob_loglikelihood_disc(variables):
 # Implementation of Conditional Gaussians
     # Based on https://par.nsf.gov/servlets/purl/10048513
 def calc_cond_loglikelihood(variables):
-#variables = ['Nscore', 'Oscore']
-
     y = variables[0]
     parents = variables[1:]
     parents_d = []
@@ -432,8 +428,6 @@ def calc_cond_loglikelihood(variables):
     if (len(parents_c) == 0) and (y_continuous == False):
         X = train_df.groupby(variables).size()
         N = len(train_df)
-        
-        # with PMF & loglikelihood
         P = X / N
         loglike_array = multinomial.logpmf(X.tolist(), N, P.tolist())
         loglikelihood = np.sum(loglike_array)
@@ -462,24 +456,26 @@ def calc_cond_loglikelihood(variables):
         else:
             X = train_df.set_index(parents_d + [y])[parents_c]
         pi_i = X.index.unique().tolist()
-        
         # Iterate over partitions
         for p in pi_i:
             # Create design matrix for partition p
+            X = X.sort_index()
             X_p = X.loc[p]
             n, k = X_p.shape
             # Parameter estimation with MLE for each parent_c
-            #mu_vec = []
             sigma_vec = []
             for var in X_p.columns:
                 mean, variance = norm.fit(X_p[var]) #MLE
-                #mu_vec.append(mean)
+                # if variance is 0 (because not enough cases), then estimation from train_df
+                if variance == 0: 
+                    mean, variance = norm.fit(train_df[var])
                 sigma_vec.append(variance)
             sigma_array = np.array(sigma_vec)
-            # Calculate Likelihood with Formula
+            # Calculate Likelihood with Formula from Andrews et al.
             loglike_c = -(n / 2) * (np.log(abs(sigma_array)) + k * np.log(2 * math.pi) + 1)
-            loglike_d = n * np.log(n / len(train_df))
-            loglikelihood += loglike_c + loglike_d
+            logprob_d = n * np.log(n / len(train_df))
+            loglikelihood += loglike_c + logprob_d
+    
     # Calculate likelihood of parents
     loglike_parents = 0
     for parent in parents:
@@ -571,7 +567,7 @@ def hill_climbing_algorithm(target_variable):
     score = calculate_score(structure)
     # Creating list with child-nodes
     list_children = variable_list.copy()
-    random.seed(123)
+    np.random.seed(123)
     # Going through every y in P(y|x1,x2...)
     while list_children != []:
         list_parents = variable_list.copy()
@@ -596,7 +592,7 @@ def hill_climbing_algorithm(target_variable):
                     history.append(('no update', (str(target), combo), score_new))
         iteration = iteration + 1
     return structure, history
-    
+  
 result1, history = hill_climbing_algorithm('User_LSD')
 
 for line in history:
@@ -693,7 +689,10 @@ def query_prob(result, Y, y, e):
             if result[Y] != '':
                 parents = list(result[Y])
                 avg, std = cond_prob_parameter_continuous(train_df, Y, parents, e)
-                ret = norm.pdf(y, avg, std)
+                if std == 0:
+                    ret = 1
+                else:
+                    ret = norm.pdf(y, avg, std)
             else: 
                 avg, std = ind_prob_parameter_continuous(train_df, Y)
                 ret = norm.pdf(y, avg, std)
@@ -712,6 +711,7 @@ def query_prob(result, Y, y, e):
                 cpt = cpt.reorder_levels(order = [Y] + parents)
                 try:
                     ret = cpt.loc[(y,) + tuple(e[parents])]
+                # When this tuple combination is not in df (e.g. 'User_LSD' == True & 'Age' == 65+)
                 except KeyError:
                     ret = 0
             else: 
@@ -749,7 +749,7 @@ def enumerate_ask(X, e, result):
 #X = 'User_LSD' # Target Variable
 #e = X_test.iloc[-2,][Big5Var + DemoVar]
     # Initialization of distribution of target variable X
-    Q = pd.Series([])
+    Q = pd.Series([],dtype=pd.StringDtype())
     # For each possible value x that X can have
     for x in PsychDrug[X].unique():
         # extend evidence e with value of X
@@ -781,6 +781,7 @@ def prediction_scratch_enumerate(test_df, result, X):
 y_pred = prediction_scratch_enumerate(test_df, result1, 'User_LSD')
 prediction_metrics('User_LSD', y_pred, y_test)
 
+
 #%%
 # ---------- Results with pomegranate structure -------------------------------
 
@@ -800,10 +801,6 @@ for i, node in enumerate(model.structure):
         for j in node:
             parents += (dictionary[j],)
     structure[child] = parents
-
-structure.pop('Gender', None)
-structure.pop('Oscore_d', None)
-structure.pop('User_Alcohol', None)
 
 y_pred = prediction_scratch_enumerate(test_df, structure, 'User_LSD')
 prediction_metrics('User_LSD', y_pred, y_test)
