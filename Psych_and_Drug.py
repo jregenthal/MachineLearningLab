@@ -551,36 +551,6 @@ result1, history = hill_climbing_algorithm(TargetVar)
 
 
 #%%
-# ---------- 4.2.1 Bayesian Structure Learning: Evaluation ---------------------------------
-
-for line in history:
-    print(line)
-
-# TESTING
-# Plotting different Likelihoods
-variables = ['User_LSD', 'Oscore_d', 'Education']
-variables = 'User_LSD'
-variables = ['Oscore', 'Nscore', 'Escore']
-
-x = []
-y = []
-for i in range(100,1300,100):
-    train_df_small = train_df_large[1:i]
-    train_df = train_df_small
-    x.append(i)
-    logli = calc_cond_loglikelihood(variables)
-    #logli = calc_cond_prob_loglikelihood_disc(variables)
-    #logli = calc_independent_loglikelihood_var_disc(variables)
-    y.append(logli)
-    print('parents: ', len(variables)-1, 'datapoints: ', i , ' , ', logli)
-
-                                       
-plt.scatter(x,y)
-plt.title(str(variables))
-plt.show()
-
-
-#%%
 # ---------- 4.3. Probabilistic Inference ------------------------------------
 
 def ind_prob_table_discrete(df, variable):
