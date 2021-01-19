@@ -8,22 +8,23 @@ Due date:
 #%%
 # ---------- 0.Preliminaries -------------------------------------------------
 
+from pomegranate import *
+#from pomegranate.utils import plot_networkx
 import numpy as np
 import pandas as pd
-from sklearn.preprocessing import LabelEncoder
+from sklearn.preprocessing import LabelEncoder, KBinsDiscretizer
 from sklearn.model_selection import train_test_split
 from sklearn import metrics
-import matplotlib.pyplot as plt
-import seaborn as sns
 from scipy.stats import chi2_contingency, norm, multinomial, stats
-from matplotlib import patches as mpatches
-from pomegranate import *
-from pomegranate.utils import plot_networkx
 import networkx
-from itertools import combinations, chain
-from sklearn.preprocessing import KBinsDiscretizer
+from itertools import combinations
 import math, copy
-import random
+import seaborn as sns
+import matplotlib.pyplot as plt
+from matplotlib import patches as mpatches
+import Psych_and_Drug_functions as PDfunc
+
+
 
 # ---------- 1.Reading and cleaning data -------------------------------------
 
@@ -105,6 +106,8 @@ def mapping(data, col):
         rep = rep.replace(value[0], value[1])
     return rep
 
+
+# Dequantification of the data
 PsychDrug['Age'] = mapping(PsychDrug,'Age')
 PsychDrug['Gender'] = mapping(PsychDrug,'Gender')
 PsychDrug['Education'] = mapping(PsychDrug,'Education')
@@ -294,8 +297,8 @@ sns.scatterplot(PsychDrug['Nscore_d'], PsychDrug['Nscore'])
 #%%
 # ---------- 3.2. Split into Training & Test Data ----------------------------
 
-#Big5Var = ['Nscore_d','Escore_d','Oscore_d','Ascore_d','Cscore_d'] #+ ['Impulsiv_d', 'SS_d']
-Big5Var = ['Nscore','Escore','Oscore','Ascore','Cscore'] #+ ['Impulsiv', 'SS']
+Big5Var = ['Nscore_d','Escore_d','Oscore_d','Ascore_d','Cscore_d'] #+ ['Impulsiv_d', 'SS_d']
+#Big5Var = ['Nscore','Escore','Oscore','Ascore','Cscore'] #+ ['Impulsiv', 'SS']
 
 # Split into train and test data
 X_train, X_test, y_train, y_test = train_test_split(PsychDrug[DemoVar + Big5Var], 
@@ -307,9 +310,26 @@ train_df = X_train.join(y_train)
 test_df = X_test.join(y_test)
 
 #%%
-# ---------- 3.3. Training a Bayesian Networks with pomegranate ---------------
+# ---------- 3.3. Simple Baseline --------------------------------------------
 
-# ---------- 3.3.1 Approach 1: Unconstraint learning from data with pomegranate---
+# see if majority class is user oder non-user
+
+def prediction_simple_baseline(test_df, var):
+    majority_class = np.mean(train_df[var])
+    if majority_class > 0.5:
+        y_pred = np.ones(len(test_df))
+    else:
+        y_pred = np.zeros(len(test_df))      
+    y_pred = pd.DataFrame(y_pred, columns=[var]).set_index(y_test.index)
+    return y_pred
+
+y_pred = prediction_simple_baseline(test_df, 'User_LSD')
+prediction_metrics('User_LSD', y_pred, y_test)
+
+#%%
+# ---------- 3.4. Training a Bayesian Networks with pomegranate ---------------
+
+# ---------- 3.4.1 Approach 1: Unconstraint learning from data with pomegranate---
 
 # Exact learning: Traditional shortest path algorithm
 model = BayesianNetwork.from_samples(train_df, algorithm='exact-dp')
@@ -330,12 +350,10 @@ model.log_probability(train_df.to_numpy()).sum()
 y_pred = prediction_pomegranate(model, X_test, y_test)
 prediction_metrics('User_LSD', y_pred, y_test)
 
-# Dictionary for network nodes to read network structure
-for i, var in enumerate(DemoVar+Big5Var+DrugVar):
-    print(var, ': ', i)
+
     
 #%%
-# ---------- 3.3.2 Approach 2: Constrained learning from data with pomegranate---
+# ---------- 3.4.2 Approach 2: Constrained learning from data with pomegranate---
 
 # Create scaffold of network
 demographics = tuple(range(0, len(DemoVar))) #['Education','Gender', 'Age']
@@ -362,6 +380,10 @@ model.log_probability(train_df.to_numpy()).sum()
 # Prediction of the X_test data
 y_pred = prediction_pomegranate(model, X_test, y_test)
 prediction_metrics('User_LSD', y_pred, y_test)
+
+# Dictionary for network nodes to read network structure
+for i, var in enumerate(DemoVar+Big5Var+DrugVar):
+    print(var, ': ', i)
 
 #%%
 # ---------- 4. Bayesian Network from scratch --------------------------------
