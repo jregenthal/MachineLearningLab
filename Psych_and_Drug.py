@@ -125,8 +125,8 @@ PsychDrug = PsychDrug.join(var_discretized)
 TargetVar = 'User_Ecstasy'
 DrugVar = [TargetVar]
 DemoVar = ['Education','Gender', 'Age']
-#Big5Var = ['Nscore','Escore','Oscore','Ascore','Cscore'] #+ ['Impulsiv', 'SS']
-Big5Var = ['Nscore_d','Escore_d','Oscore_d','Ascore_d','Cscore_d'] + ['Impulsiv_d', 'SS_d']
+Big5Var = ['Nscore','Escore','Oscore','Ascore','Cscore'] + ['Impulsiv', 'SS']
+#Big5Var = ['Nscore_d','Escore_d','Oscore_d','Ascore_d','Cscore_d'] + ['Impulsiv_d', 'SS_d']
 
 # Split into train and test data
 X_train, X_test, y_train, y_test = train_test_split(PsychDrug[DemoVar + Big5Var], 
@@ -221,10 +221,10 @@ def cramers_corrected_stat(v1,v2):
     return np.sqrt(phi2corr / min( (kcorr-1), (rcorr-1)))
 
 def calculate_CramersV():
-    CramersV_df = pd.DataFrame(DemoVar, columns = ['Variable'])
+    CramersV_df = pd.DataFrame(DemoVar + Big5Var, columns = ['Variable'])
     for drug in DrugVar:
         CramersV = []
-        for variable in DemoVar:
+        for variable in DemoVar + Big5Var:
             CramersV.append(cramers_corrected_stat(drug, variable))
         CramersV_df[drug] = CramersV
     return(CramersV_df)
@@ -446,11 +446,6 @@ def calc_cond_loglikelihood(variables):
 
 # ---------- 4.2 Bayesian Structure Learning ---------------------------------
 
-#train_df_large = train_df
-#train_df_small = train_df[1:100]
-#train_df = train_df_small
-#train_df = train_df_large
-
 # Hill-climbing algorithm
 
 def powerset(variables):
@@ -491,13 +486,15 @@ def calculate_score(structure):
     for key, value in structure.items():
         list_cond = []
         if value == '':
-            score += calc_independent_loglikelihood_var_disc(key)
+            if (key in Big5Var) & (key[-1] != 'd'):
+                score += calc_independent_loglikelihood_var_cont(key)
+            else:
+                score += calc_independent_loglikelihood_var_disc(key)
         else:
             list_cond.append(key)
             for val in value:
                 list_cond.append(val)
             score += calc_cond_loglikelihood(list_cond)
-            #score += calc_cond_prob_loglikelihood_disc(list_cond)
     return score
 
 def generate_new_structure(structure, child, parents):
@@ -549,6 +546,8 @@ def hill_climbing_algorithm(target_variable):
   
 result1, history = hill_climbing_algorithm(TargetVar)
 
+for line in history:
+    print(line)
 
 #%%
 # ---------- 4.3. Probabilistic Inference ------------------------------------
