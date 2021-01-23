@@ -122,7 +122,7 @@ PsychDrug = PsychDrug.join(var_discretized)
 #%%
 # ---------- 1.5. Split into Training & Test Data ----------------------------
 
-TargetVar = 'User_Ecstasy'
+TargetVar = 'User_Cannabis'
 DrugVar = [TargetVar]
 DemoVar = ['Education','Gender', 'Age']
 Big5Var = ['Nscore','Escore','Oscore','Ascore','Cscore'] + ['Impulsiv', 'SS']
@@ -144,13 +144,13 @@ def prediction_metrics(drug, y_pred, y_test):
     true_values = y_test[drug].tolist()
     
     confusion_matrix = metrics.confusion_matrix(true_values, predicted_values)
-    sensitivity = confusion_matrix[0,0] / (confusion_matrix[0,0] + confusion_matrix[1,0]) # TP / (TP + FN)
-    specifity = confusion_matrix[1,1] / (confusion_matrix[0,1] + confusion_matrix[1,1]) # TN / (TN + FP)
+    sensitivity = confusion_matrix[0,0] / (confusion_matrix[0,0] + confusion_matrix[0,1]) # TP / (TP + FN)
+    specificity = confusion_matrix[1,1] / (confusion_matrix[1,0] + confusion_matrix[1,1]) # TN / (TN + FP)
     
     print("Confusion_matrix:\n", confusion_matrix,
           "\nAccuracy: ", metrics.accuracy_score(true_values, predicted_values).round(2),
           "\nSensitivity: ", round(sensitivity, 2),
-          "\nSpecificity: ", round(specifity, 2))
+          "\nSpecificity: ", round(specificity, 2))
 
 def prediction_simple_baseline(test_df, var):
     majority_class = np.mean(train_df[var])
